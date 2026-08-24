@@ -133,7 +133,7 @@ export function updateTrains(dt) {
     train.speed = Math.abs(train.velocity);
     train.throttle = train.targetThrottle;
     if (Math.abs(train.velocity) < 0.01) { train.velocity = 0; train.speed = 0; continue; }
-    const requestedDirection = train.velocity >= 0 ? 1 : -1;
+    const requestedDirection = Math.abs(train.targetThrottle) >= 0.03 ? (train.targetThrottle > 0 ? 1 : -1) : train.direction;
     if (train.direction !== requestedDirection) reverseTrainPath(train);
     if (!train.entry || !train.exit) {
       if (!setTrainPath(train, requestedDirection)) { stopTrain(train, "dead end"); train.velocity = 0; train.speed = 0; continue; }
