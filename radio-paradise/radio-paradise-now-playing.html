@@ -67,7 +67,7 @@
 
     .hero-top {
       display: flex;
-      align-items: flex-start;
+      align-items: center;
       justify-content: space-between;
       gap: 14px;
       flex-wrap: wrap;
@@ -81,8 +81,42 @@
       min-width: 0;
     }
 
-    .badge {
-      display: none;
+    .status {
+      margin: 0 0 0 auto;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.72rem;
+      color: #bfe4f2;
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 9px;
+      text-align: right;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+
+    .status.error {
+      color: var(--danger);
+    }
+
+    .refresh-ring {
+      --refresh-progress: 0%;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      flex: 0 0 24px;
+      display: grid;
+      place-items: center;
+      background: conic-gradient(var(--accent) var(--refresh-progress), rgba(156, 184, 194, 0.2) 0);
+      position: relative;
+    }
+
+    .refresh-ring::after {
+      content: "";
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--bg-1);
     }
 
     .now {
@@ -91,6 +125,14 @@
       grid-template-columns: 136px 1fr;
       gap: 14px;
       align-items: start;
+    }
+
+    .song-info {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 14px;
+      align-items: start;
+      min-width: 0;
     }
 
     .cover {
@@ -109,6 +151,24 @@
       line-height: 1.22;
     }
 
+    .rating-indicator {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: #53656c;
+      color: rgba(233, 244, 248, 0.58);
+      font: 500 0.78rem "IBM Plex Mono", monospace;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+      flex-shrink: 0;
+    }
+
+    .rating-indicator.empty {
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
     .meta {
       margin-top: 6px;
       color: var(--muted);
@@ -123,26 +183,48 @@
       line-height: 1.4;
     }
 
-    .status {
-      margin-top: 10px;
+    .progress-wrap {
+      margin-top: 14px;
+      position: relative;
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 7px;
+      appearance: none;
+      display: block;
+      border: 0;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(156, 184, 194, 0.2);
+    }
+
+    .progress-track::-webkit-progress-bar {
+      background: rgba(156, 184, 194, 0.2);
+      border-radius: 999px;
+    }
+
+    .progress-track::-webkit-progress-value {
+      background: var(--accent);
+      border-radius: 999px;
+      transition: width 900ms linear;
+    }
+
+    .progress-track::-moz-progress-bar {
+      background: var(--accent);
+      border-radius: 999px;
+    }
+
+    .progress-meta {
+      position: absolute;
+      top: 50%;
+      right: 7px;
+      transform: translateY(-50%);
       font-family: "IBM Plex Mono", monospace;
-      font-size: 0.8rem;
-      color: #bfe4f2;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .status.error {
-      color: var(--danger);
-    }
-
-    .countdown-badge {
+      color: var(--ink);
       font-size: 0.75rem;
-      color: #76c8ff;
-      font-weight: 500;
-      flex-shrink: 0;
+      line-height: 1;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65);
     }
 
     .history {
@@ -268,6 +350,22 @@
       font-size: 0.82rem;
       color: var(--muted);
       white-space: nowrap;
+    }
+
+    .channel-select {
+      min-width: 140px;
+      padding: 7px 28px 7px 9px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: rgba(52, 214, 179, 0.12);
+      color: var(--ink);
+      font: 500 0.82rem "IBM Plex Mono", monospace;
+      cursor: pointer;
+    }
+
+    .channel-select:focus {
+      outline: 1px solid var(--accent);
+      outline-offset: 2px;
     }
 
     .volume-wrap {
@@ -464,8 +562,7 @@
       }
 
       .hero-top {
-        flex-direction: column;
-        align-items: flex-start;
+        gap: 8px;
       }
 
       .title {
@@ -532,27 +629,32 @@
   <main class="wrap">
     <section class="hero">
       <div class="hero-top">
-        <h1 class="title">Radio Paradise: Now Playing</h1>
-        <div class="badge" id="refreshBadge">next refresh: --</div>
+        <h1 class="title" id="channelTitle">RP: Main Mix</h1>
+        <div class="status" id="statusLine">
+          <span id="statusText">Starting...</span>
+          <span id="refreshRing" class="refresh-ring" role="progressbar" aria-label="Time until next refresh" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></span>
+        </div>
       </div>
 
       <div class="now">
         <img id="cover" class="cover" alt="Cover art" />
-        <div>
-          <h2 class="song-title" id="songTitle">Waiting for data...</h2>
-          <div class="meta" id="songMeta"></div>
-          <div class="tiny" id="songTiny"></div>
-          <div class="status" id="statusLine">
-            <span id="statusText">Starting...</span>
-            <span id="countdownText" class="countdown-badge"></span>
+        <div class="song-info">
+          <div>
+            <h2 class="song-title" id="songTitle">Waiting for data...</h2>
+            <div class="meta" id="songMeta"></div>
+            <div class="progress-wrap">
+              <progress id="songProgress" class="progress-track" value="0" max="1" aria-label="Song progress"></progress>
+              <div class="progress-meta" id="songDuration">--:--</div>
+            </div>
           </div>
+          <div id="ratingIndicator" class="rating-indicator empty" aria-label="Listener rating">--</div>
         </div>
       </div>
 
       <!-- Audio Player -->
       <section class="player">
         <button id="playBtn" class="play-btn" title="Play / Pause">▶</button>
-        <span class="player-label">Stream Audio</span>
+        <select id="channelSelect" class="channel-select" aria-label="Radio Paradise channel"></select>
         <div class="volume-wrap">
           <span id="volIcon" class="volume-icon">🔊</span>
           <input type="range" id="volSlider" class="volume-slider" min="0" max="1" step="0.01" value="0.30" />
@@ -572,7 +674,19 @@
   <script type="module">
     import { initWebWidget } from "/apps/kilroy.groups/js/webwidget_sdk.js";
 
-    const RP_URL = "https://api.radioparadise.com/api/nowplaying_list_v2022?chan=0&source=The%20Main%20Mix&player_id=&sync_id=chan_0&type=channel&mode=wip-channel&list_num=20";
+    const RP_API_URL = "https://api.radioparadise.com/api/nowplaying_list_v2022";
+    const CHANNELS = [
+      { chan: 0, title: "The Main Mix", stream: "aac-320" },
+      { chan: 1, title: "Mellow Mix", stream: "mellow-320" },
+      { chan: 2, title: "RockIt!", stream: "rock-320" },
+      { chan: 3, title: "The Globe", stream: "global-320" },
+      { chan: 5, title: "Beyond...", stream: "beyond-320" }
+    ];
+    const RATING_BREAKPOINTS = [
+      "#8f211c", "#a83e19", "#b75a18", "#c27b16", "#c49b15",
+      "#c5b91b", "#a9c91d", "#79bd20", "#48ad24", "#2b9727",
+      "#217f26"
+    ];
     const WEBHOOK_ALIAS = "kilroy.ai.webhooks";
     const WEBHOOK_TRIGGER = "get_url";
 
@@ -585,12 +699,15 @@
     });
 
     const coverEl = document.getElementById("cover");
+    const channelTitleEl = document.getElementById("channelTitle");
     const songTitleEl = document.getElementById("songTitle");
     const songMetaEl = document.getElementById("songMeta");
-    const songTinyEl = document.getElementById("songTiny");
+    const ratingIndicatorEl = document.getElementById("ratingIndicator");
+    const songProgressEl = document.getElementById("songProgress");
+    const songDurationEl = document.getElementById("songDuration");
     const statusLineEl = document.getElementById("statusLine");
     const statusTextEl = document.getElementById("statusText");
-    const countdownTextEl = document.getElementById("countdownText");
+    const refreshRingEl = document.getElementById("refreshRing");
     const rowsEl = document.getElementById("rows");
     const historyHead = document.getElementById("historyHead");
     const historySection = document.querySelector(".history");
@@ -606,23 +723,57 @@
     });
 
     // Audio player elements
-    const STREAM_URL = "http://stream.radioparadise.com/aac-320";
     const audio = new Audio();
     audio.volume = 0.30;
     audio.preload = "none";
     let isPlaying = false;
+    let progressTimer = null;
+    let currentSong = null;
 
     const playBtn = document.getElementById("playBtn");
+    const channelSelect = document.getElementById("channelSelect");
     const volSlider = document.getElementById("volSlider");
     const volIcon = document.getElementById("volIcon");
 
     let pollTimer = null;
     let countdownTimer = null;
+    let refreshDuration = 0;
     let historyCollapsed = false;
+    let activeChannel = CHANNELS[0];
 
     function getQuery(name) {
       const url = new URL(window.location.href);
       return url.searchParams.get(name) || "";
+    }
+
+    function getChannelApiUrl(channel) {
+      const url = new URL(RP_API_URL);
+      url.searchParams.set("chan", String(channel.chan));
+      url.searchParams.set("source", channel.title);
+      url.searchParams.set("player_id", "");
+      url.searchParams.set("sync_id", "chan_" + channel.chan);
+      url.searchParams.set("type", "channel");
+      url.searchParams.set("mode", "wip-channel");
+      url.searchParams.set("list_num", "20");
+      return url.toString();
+    }
+
+    function getStreamUrl(channel) {
+      return "https://stream.radioparadise.com/" + channel.stream;
+    }
+
+    function initializeChannelSelector() {
+      const requestedChannel = Number(getQuery("chan"));
+      activeChannel = CHANNELS.find((channel) => channel.chan === requestedChannel) || CHANNELS[0];
+
+      channelSelect.innerHTML = "";
+      CHANNELS.forEach((channel) => {
+        const option = document.createElement("option");
+        option.value = String(channel.chan);
+        option.textContent = channel.title;
+        option.selected = channel.chan === activeChannel.chan;
+        channelSelect.appendChild(option);
+      });
     }
 
     function setStatus(text, isError) {
@@ -634,6 +785,71 @@
       if (!ms) return "--:--";
       const d = new Date(Number(ms));
       return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    }
+
+    function formatDuration(seconds) {
+      const totalSeconds = Math.max(0, Math.round(Number(seconds) || 0));
+      const minutes = Math.floor(totalSeconds / 60);
+      return minutes + ":" + String(totalSeconds % 60).padStart(2, "0");
+    }
+
+    function updateRatingIndicator(rating) {
+      const numericRating = Number(rating);
+      if (!Number.isFinite(numericRating)) {
+        ratingIndicatorEl.textContent = "--";
+        ratingIndicatorEl.classList.add("empty");
+        ratingIndicatorEl.style.background = "#53656c";
+        ratingIndicatorEl.style.color = "rgba(233, 244, 248, 0.42)";
+        ratingIndicatorEl.setAttribute("aria-label", "Listener rating unavailable");
+        return;
+      }
+
+      const normalizedRating = Math.max(0, Math.min(10, numericRating));
+      const lowerIndex = Math.min(9, Math.floor(normalizedRating));
+      const upperIndex = Math.min(10, lowerIndex + 1);
+      const blend = normalizedRating - lowerIndex;
+      const color = interpolateColor(RATING_BREAKPOINTS[lowerIndex], RATING_BREAKPOINTS[upperIndex], blend);
+      ratingIndicatorEl.textContent = normalizedRating.toFixed(1);
+      ratingIndicatorEl.classList.remove("empty");
+      ratingIndicatorEl.style.background = color;
+      ratingIndicatorEl.style.color = "rgba(233, 244, 248, 0.58)";
+      ratingIndicatorEl.setAttribute("aria-label", "Listener rating " + normalizedRating.toFixed(1) + " out of 10");
+    }
+
+    function interpolateColor(startHex, endHex, amount) {
+      const start = hexToRgb(startHex);
+      const end = hexToRgb(endHex);
+      const channel = (name) => Math.round(start[name] + (end[name] - start[name]) * amount);
+      return "rgb(" + channel("r") + ", " + channel("g") + ", " + channel("b") + ")";
+    }
+
+    function hexToRgb(hex) {
+      return {
+        r: parseInt(hex.slice(1, 3), 16),
+        g: parseInt(hex.slice(3, 5), 16),
+        b: parseInt(hex.slice(5, 7), 16)
+      };
+    }
+
+    function updateSongProgress() {
+      if (!currentSong) return;
+
+      const durationSeconds = Math.max(1, Number(currentSong.duration || 0) / 1000);
+      const startedAt = Number(currentSong.play_time || 0);
+      const elapsedSeconds = startedAt ? Math.max(0, (Date.now() - startedAt) / 1000) : 0;
+
+      songProgressEl.max = durationSeconds;
+      songProgressEl.value = Math.min(durationSeconds, elapsedSeconds);
+      songDurationEl.textContent = formatDuration(durationSeconds);
+    }
+
+    function setProgressTimer(active) {
+      clearInterval(progressTimer);
+      progressTimer = null;
+      if (!active || !currentSong) return;
+
+      updateSongProgress();
+      progressTimer = setInterval(updateSongProgress, 1000);
     }
 
     function parseApiResponse(payload) {
@@ -662,10 +878,20 @@
       if (!current) {
         songTitleEl.textContent = "No track data available";
         songMetaEl.textContent = "";
-        songTinyEl.textContent = "";
+        updateRatingIndicator(null);
+        currentSong = null;
+        setProgressTimer(false);
+        songProgressEl.max = 1;
+        songProgressEl.value = 0;
+        songDurationEl.textContent = "--:--";
         rowsEl.innerHTML = "";
         return;
       }
+
+      currentSong = current;
+      setProgressTimer(isPlaying);
+      channelTitleEl.textContent = "RP: " + (data.channel?.title || current.channel?.title || "Main Mix");
+      updateRatingIndicator(current.listener_rating);
 
       // Build clickable link for current song
       const currentLink = buildSongLink(current);
@@ -681,8 +907,7 @@
         songTitleEl.textContent = current.title || "Untitled";
       }
 
-      songMetaEl.textContent = (current.artist || "Unknown artist") + " | " + (current.album || "Unknown album");
-      songTinyEl.textContent = "started " + toTime(current.play_time) + " | duration " + Math.round((Number(current.duration || 0) / 1000) || 0) + "s";
+      songMetaEl.textContent = (current.artist || "Unknown artist") + " | " + (current.album || "Unknown album") + " | " + (current.year || "Unknown year");
 
       const coverPath = current.cover_med || current.cover_small || current.cover || "";
       coverEl.src = coverPath ? (coverBase + coverPath) : "";
@@ -750,12 +975,52 @@
 
     function setCountdown(seconds) {
       clearInterval(countdownTimer);
-      let remaining = Math.max(1, Math.floor(seconds));
-      countdownTextEl.textContent = remaining + "s";
+      refreshDuration = Math.max(1, Math.floor(seconds));
+      let elapsed = 0;
+      refreshRingEl.style.setProperty("--refresh-progress", "0%");
+      refreshRingEl.setAttribute("aria-valuenow", "0");
       countdownTimer = setInterval(() => {
-        remaining = Math.max(0, remaining - 1);
-        countdownTextEl.textContent = remaining + "s";
+        elapsed = Math.min(refreshDuration, elapsed + 1);
+        const percent = Math.round((elapsed / refreshDuration) * 100);
+        refreshRingEl.style.setProperty("--refresh-progress", percent + "%");
+        refreshRingEl.setAttribute("aria-valuenow", String(percent));
+        if (elapsed >= refreshDuration) {
+          clearInterval(countdownTimer);
+          refreshRingEl.style.setProperty("--refresh-progress", "0%");
+          refreshRingEl.setAttribute("aria-valuenow", "0");
+        }
       }, 1000);
+    }
+
+    async function switchChannel(channelNumber) {
+      const nextChannel = CHANNELS.find((channel) => channel.chan === Number(channelNumber));
+      if (!nextChannel || nextChannel.chan === activeChannel.chan) return;
+
+      const wasPlaying = isPlaying;
+      activeChannel = nextChannel;
+      currentSong = null;
+      clearInterval(progressTimer);
+      progressTimer = null;
+      songProgressEl.max = 1;
+      songProgressEl.value = 0;
+      songDurationEl.textContent = "--:--";
+      setStatus("Switching to " + activeChannel.title + "...", false);
+
+      if (wasPlaying) {
+        audio.pause();
+        audio.src = getStreamUrl(activeChannel);
+        try {
+          await audio.play();
+        } catch (err) {
+          isPlaying = false;
+          playBtn.textContent = "▶";
+          playBtn.classList.remove("playing");
+          setProgressTimer(false);
+          setStatus("Channel changed; playback could not start", true);
+        }
+      }
+
+      await fetchNowPlaying();
     }
 
     async function fetchNowPlaying() {
@@ -774,14 +1039,14 @@
       const body = {
         from: "rp-now-playing-widget",
         type: "text/plain",
-        text: "fetch " + RP_URL,
+        text: "fetch " + getChannelApiUrl(activeChannel),
         sync: true,
         tfrom: "rp-now-playing-widget",
         tusername: "widget",
         tagentname: "rp-now-playing-widget",
-        args: [{ text: RP_URL }],
+        args: [{ text: getChannelApiUrl(activeChannel) }],
         targs: JSON.stringify({
-          url: RP_URL,
+          url: getChannelApiUrl(activeChannel),
           content_type: "application/json"
         })
       };
@@ -833,12 +1098,14 @@
       if (isPlaying) {
         audio.pause();
         isPlaying = false;
+        setProgressTimer(false);
         playBtn.textContent = "▶";
         playBtn.classList.remove("playing");
       } else {
-        audio.src = STREAM_URL;
+        audio.src = getStreamUrl(activeChannel);
         audio.play().catch(() => {});
         isPlaying = true;
+        setProgressTimer(true);
         playBtn.textContent = "⏸";
         playBtn.classList.add("playing");
       }
@@ -849,6 +1116,10 @@
       updateVolIcon();
     });
 
+    channelSelect.addEventListener("change", () => {
+      switchChannel(channelSelect.value);
+    });
+
 
 
     historyHead.addEventListener("click", () => {
@@ -856,6 +1127,7 @@
       historySection.classList.toggle("collapsed", historyCollapsed);
     });
 
+    initializeChannelSelector();
     hydrateDefaults();
     sdk.ready.then(() => fetchNowPlaying()).catch((err) => {
       setStatus("Widget init failed: " + (err && err.message ? err.message : String(err)), true);

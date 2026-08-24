@@ -62,21 +62,69 @@ export class Renderer {
     paths.forEach(([from, to, geometry, active = true]) => {
       const start = points[from];
       const end = to ? points[to] : [0, 0];
-      ctx.strokeStyle = active ? "#b9c4bd" : "rgba(185,196,189,.28)";
-      ctx.lineWidth = active ? 7 : 4;
-      ctx.beginPath();
-      if (geometry === "curve" && from && to) {
-        ctx.moveTo(start[0], start[1]);
-        ctx.quadraticCurveTo(0, 0, end[0], end[1]);
-      } else if (from && to) {
-        ctx.moveTo(start[0], start[1]);
-        ctx.lineTo(end[0], end[1]);
-      } else if (from) {
-        ctx.moveTo(start[0], start[1]);
-        ctx.lineTo(0, 0);
-      }
-      ctx.stroke();
+      this.drawTrackPath(ctx, start, end, geometry, half, active, Boolean(to));
     });
+  }
+
+  drawTrackPath(ctx, start, end, geometry, half, active, hasEnd) {
+    const railColor = active ? "#d5ddd8" : "rgba(213,221,216,.28)";
+    const bedColor = active ? "rgba(79,61,49,.9)" : "rgba(79,61,49,.28)";
+    const railOffset = 6;
+    ctx.lineCap = "butt";
+    const sampleCount = geometry === "curve" && hasEnd ? 16 : 5;
+    const centerPoints = [];
+    for (let index = 0; index <= sampleCount; index++) {
+      centerPoints.push(this.getPathPoint(start, end, geometry, index / sampleCount, hasEnd));
+    }
+    const railPoints = (offset) => centerPoints.map((point, index) => {
+      const previous = centerPoints[Math.max(0, index - 1)];
+      const next = centerPoints[Math.min(centerPoints.length - 1, index + 1)];
+      const length = Math.hypot(next.x - previous.x, next.y - previous.y) || 1;
+      const tangentX = (next.x - previous.x) / length;
+      const tangentY = (next.y - previous.y) / length;
+      const endpointOverlap = hasEnd && (index === 0 || index === centerPoints.length - 1) ? 1.5 : 0;
+      const endpointDirection = index === 0 ? -1 : 1;
+      return { x: point.x + tangentX * endpointOverlap * endpointDirection - tangentY * offset, y: point.y + tangentY * endpointOverlap * endpointDirection + tangentX * offset };
+    });
+    this.drawPolyline(ctx, centerPoints, bedColor, 17);
+    const ties = geometry === "curve" ? 6 : 5;
+    for (let index = 0; index < ties; index++) {
+      const normalizedPosition = (index + 0.5) / ties;
+      const pointIndex = Math.round(normalizedPosition * sampleCount);
+      const point = centerPoints[pointIndex];
+      const previous = centerPoints[Math.max(0, pointIndex - 1)];
+      const next = centerPoints[Math.min(centerPoints.length - 1, pointIndex + 1)];
+      const tangentX = next.x - previous.x;
+      const tangentY = next.y - previous.y;
+      const length = Math.hypot(tangentX, tangentY) || 1;
+      const normalX = -tangentY / length;
+      const normalY = tangentX / length;
+      ctx.strokeStyle = active ? "#705a49" : "rgba(112,90,73,.3)";
+      ctx.lineWidth = 4;
+      ctx.lineCap = "butt";
+      ctx.beginPath();
+      ctx.moveTo(point.x - normalX * 22 / 2, point.y - normalY * 22 / 2);
+      ctx.lineTo(point.x + normalX * 22 / 2, point.y + normalY * 22 / 2);
+      ctx.stroke();
+    }
+    this.drawPolyline(ctx, railPoints(-railOffset), railColor, 3);
+    this.drawPolyline(ctx, railPoints(railOffset), railColor, 3);
+  }
+
+  getPathPoint(start, end, geometry, t, hasEnd) {
+    if (!hasEnd) return { x: start[0] * (1 - t), y: start[1] * (1 - t) };
+    if (geometry === "curve") return { x: (1 - t) * (1 - t) * start[0] + t * t * end[0], y: (1 - t) * (1 - t) * start[1] + t * t * end[1] };
+    return { x: start[0] + (end[0] - start[0]) * t, y: start[1] + (end[1] - start[1]) * t };
+  }
+
+  drawPolyline(ctx, points, color, width) {
+    if (!points.length) return;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    points.slice(1).forEach((point) => ctx.lineTo(point.x, point.y));
+    ctx.stroke();
   }
 
   drawPreview(canvas, type, rotation = 0) {
@@ -165,15 +213,22 @@ export class Renderer {
     this.ctx.save();
     this.ctx.translate(point.x + x, point.y + y);
     this.ctx.rotate(bodyAngle);
+    this.ctx.fillStyle = "rgba(255, 243, 166, 0.14)";
+    this.ctx.beginPath();
+    this.ctx.moveTo(15, 0);
+    this.ctx.lineTo(62, -24);
+    this.ctx.lineTo(62, 24);
+    this.ctx.closePath();
+    this.ctx.fill();
     this.ctx.fillStyle = train.color || "#2878c8";
     this.ctx.strokeStyle = "#d8efff";
     this.ctx.lineWidth = 1;
     this.ctx.beginPath();
-    this.ctx.roundRect(-11, -7, 22, 14, 4);
+    this.ctx.roundRect(-15, -8, 30, 16, 4);
     this.ctx.fill();
     this.ctx.stroke();
     this.ctx.fillStyle = "#fff3a6";
-    this.ctx.fillRect(7, -4, 3, 8);
+    this.ctx.fillRect(11, -5, 3, 10);
     this.ctx.restore();
   }
 }
