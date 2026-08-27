@@ -16,7 +16,7 @@
       <aside class="sidebar">
         <button id="modeToggle" class="mode-toggle" type="button" aria-pressed="false" aria-label="Switch to run mode"><span class="mode-option">EDIT</span><span class="mode-option">RUN</span><span class="mode-thumb" aria-hidden="true"></span></button>
         <div id="editControls" class="edit-controls">
-          <div class="section-heading"><h2>Track palette</h2><div class="palette-tools"><button id="layoutMenuToggle" class="menu-toggle" type="button" aria-label="Open layout menu" aria-expanded="false">☰</button><div id="layoutMenu" class="layout-menu" hidden><button id="exportLayout" type="button">Download JSON</button><button id="importLayout" type="button">Import JSON</button></div></div></div>
+          <div class="section-heading"><h2>Track palette</h2><div class="palette-tools"><button id="layoutMenuToggle" class="menu-toggle" type="button" aria-label="Open layout menu" aria-expanded="false">☰</button><div id="layoutMenu" class="layout-menu" hidden><button id="exportLayout" type="button">Save Track Layout</button><button id="importLayout" type="button">Load Track Layout</button></div></div></div>
           <input id="layoutFileInput" type="file" accept="application/json,.json" hidden>
           <div id="palette" class="palette"></div>
           <div class="tool-row"><button id="clearBoard" type="button">Clear board</button><button id="rotateTool" type="button">Rotate</button></div>
@@ -24,6 +24,8 @@
         </div>
         <div class="section-heading trains-heading"><h2>Trains</h2><button id="addTrain" type="button" class="small-button">+ Add</button></div>
         <div id="trainList" class="train-list"><div class="empty-state">No trains placed</div></div>
+        <div class="section-heading stations-heading"><h2>Stations</h2></div>
+        <div id="stationList" class="station-list"><div class="empty-state">No stations placed</div></div>
       </aside>
       <section class="board-wrap"><canvas id="board" aria-label="Train layout grid"></canvas><div id="toast" class="toast" role="status"></div></section>
     </section>

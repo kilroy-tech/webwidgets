@@ -1,4 +1,8 @@
-import { getAllSwitchPaths, getPiecePaths, rotateDirection } from "./track-types.js";
+import {
+  getAllSwitchPaths,
+  getPiecePaths,
+  rotateDirection,
+} from "./track-types.js";
 
 export class Renderer {
   constructor(canvas, appState) {
@@ -24,14 +28,17 @@ export class Renderer {
   }
 
   gridPoint(x, y) {
-    return { x: this.origin.x + x * this.cell, y: this.origin.y + y * this.cell };
+    return {
+      x: this.origin.x + x * this.cell,
+      y: this.origin.y + y * this.cell,
+    };
   }
 
   cellAt(clientX, clientY) {
     const rect = this.canvas.getBoundingClientRect();
     return {
       x: Math.round((clientX - rect.left - this.origin.x) / this.cell),
-      y: Math.round((clientY - rect.top - this.origin.y) / this.cell)
+      y: Math.round((clientY - rect.top - this.origin.y) / this.cell),
     };
   }
 
@@ -74,18 +81,34 @@ export class Renderer {
     const sampleCount = geometry === "curve" && hasEnd ? 16 : 5;
     const centerPoints = [];
     for (let index = 0; index <= sampleCount; index++) {
-      centerPoints.push(this.getPathPoint(start, end, geometry, index / sampleCount, hasEnd));
+      centerPoints.push(
+        this.getPathPoint(start, end, geometry, index / sampleCount, hasEnd),
+      );
     }
-    const railPoints = (offset) => centerPoints.map((point, index) => {
-      const previous = centerPoints[Math.max(0, index - 1)];
-      const next = centerPoints[Math.min(centerPoints.length - 1, index + 1)];
-      const length = Math.hypot(next.x - previous.x, next.y - previous.y) || 1;
-      const tangentX = (next.x - previous.x) / length;
-      const tangentY = (next.y - previous.y) / length;
-      const endpointOverlap = hasEnd && (index === 0 || index === centerPoints.length - 1) ? 1.5 : 0;
-      const endpointDirection = index === 0 ? -1 : 1;
-      return { x: point.x + tangentX * endpointOverlap * endpointDirection - tangentY * offset, y: point.y + tangentY * endpointOverlap * endpointDirection + tangentX * offset };
-    });
+    const railPoints = (offset) =>
+      centerPoints.map((point, index) => {
+        const previous = centerPoints[Math.max(0, index - 1)];
+        const next = centerPoints[Math.min(centerPoints.length - 1, index + 1)];
+        const length =
+          Math.hypot(next.x - previous.x, next.y - previous.y) || 1;
+        const tangentX = (next.x - previous.x) / length;
+        const tangentY = (next.y - previous.y) / length;
+        const endpointOverlap =
+          hasEnd && (index === 0 || index === centerPoints.length - 1)
+            ? 1.5
+            : 0;
+        const endpointDirection = index === 0 ? -1 : 1;
+        return {
+          x:
+            point.x +
+            tangentX * endpointOverlap * endpointDirection -
+            tangentY * offset,
+          y:
+            point.y +
+            tangentY * endpointOverlap * endpointDirection +
+            tangentX * offset,
+        };
+      });
     this.drawPolyline(ctx, centerPoints, bedColor, 17);
     const ties = geometry === "curve" ? 6 : 5;
     for (let index = 0; index < ties; index++) {
@@ -93,7 +116,8 @@ export class Renderer {
       const pointIndex = Math.round(normalizedPosition * sampleCount);
       const point = centerPoints[pointIndex];
       const previous = centerPoints[Math.max(0, pointIndex - 1)];
-      const next = centerPoints[Math.min(centerPoints.length - 1, pointIndex + 1)];
+      const next =
+        centerPoints[Math.min(centerPoints.length - 1, pointIndex + 1)];
       const tangentX = next.x - previous.x;
       const tangentY = next.y - previous.y;
       const length = Math.hypot(tangentX, tangentY) || 1;
@@ -103,8 +127,8 @@ export class Renderer {
       ctx.lineWidth = 4;
       ctx.lineCap = "butt";
       ctx.beginPath();
-      ctx.moveTo(point.x - normalX * 22 / 2, point.y - normalY * 22 / 2);
-      ctx.lineTo(point.x + normalX * 22 / 2, point.y + normalY * 22 / 2);
+      ctx.moveTo(point.x - (normalX * 22) / 2, point.y - (normalY * 22) / 2);
+      ctx.lineTo(point.x + (normalX * 22) / 2, point.y + (normalY * 22) / 2);
       ctx.stroke();
     }
     this.drawPolyline(ctx, railPoints(-railOffset), railColor, 3);
@@ -113,8 +137,15 @@ export class Renderer {
 
   getPathPoint(start, end, geometry, t, hasEnd) {
     if (!hasEnd) return { x: start[0] * (1 - t), y: start[1] * (1 - t) };
-    if (geometry === "curve") return { x: (1 - t) * (1 - t) * start[0] + t * t * end[0], y: (1 - t) * (1 - t) * start[1] + t * t * end[1] };
-    return { x: start[0] + (end[0] - start[0]) * t, y: start[1] + (end[1] - start[1]) * t };
+    if (geometry === "curve")
+      return {
+        x: (1 - t) * (1 - t) * start[0] + t * t * end[0],
+        y: (1 - t) * (1 - t) * start[1] + t * t * end[1],
+      };
+    return {
+      x: start[0] + (end[0] - start[0]) * t,
+      y: start[1] + (end[1] - start[1]) * t,
+    };
   }
 
   drawPolyline(ctx, points, color, width) {
@@ -132,13 +163,24 @@ export class Renderer {
     const size = 58;
     const scale = size / this.cell;
     const half = this.cell / 2;
-    const piece = { type, rotation, switchState: "straight", station: { name: "", side: "N", color: "#e9b86e" } };
+    const piece = {
+      type,
+      rotation,
+      switchState: "straight",
+      station: { name: "", side: "N", color: "#e9b86e" },
+    };
     ctx.clearRect(0, 0, size, size);
     ctx.save();
     ctx.translate(size / 2, size / 2);
     ctx.scale(scale, scale);
     ctx.lineCap = "round";
-    this.drawPaths(ctx, type.startsWith("switch") ? getAllSwitchPaths(piece) : getPiecePaths(piece), half);
+    this.drawPaths(
+      ctx,
+      type.startsWith("switch")
+        ? getAllSwitchPaths(piece)
+        : getPiecePaths(piece),
+      half,
+    );
     if (type.startsWith("switch")) {
       ctx.fillStyle = "#71d3bc";
       ctx.beginPath();
@@ -155,10 +197,18 @@ export class Renderer {
     this.ctx.save();
     this.ctx.translate(point.x, point.y);
     this.ctx.lineCap = "round";
-    this.drawPaths(this.ctx, piece.type.startsWith("switch") ? getAllSwitchPaths(piece) : getPiecePaths(piece), half);
-    if (piece.type === "station") this.drawStationLabel(this.ctx, piece, half, false);
+    this.drawPaths(
+      this.ctx,
+      piece.type.startsWith("switch")
+        ? getAllSwitchPaths(piece)
+        : getPiecePaths(piece),
+      half,
+    );
+    if (piece.type === "station")
+      this.drawStationLabel(this.ctx, piece, half, false);
     if (piece.type.startsWith("switch")) {
-      this.ctx.fillStyle = piece.switchState === "branch" ? "#d95757" : "#71d3bc";
+      this.ctx.fillStyle =
+        piece.switchState === "branch" ? "#d95757" : "#71d3bc";
       this.ctx.beginPath();
       this.ctx.arc(0, 0, 5, 0, Math.PI * 2);
       this.ctx.fill();
@@ -167,31 +217,74 @@ export class Renderer {
   }
 
   drawStationLabel(ctx, piece, half, preview) {
-    const side = rotateDirection(piece.station?.side || "N", (piece.rotation || 0) / 90);
-    const position = { N: [-half + 12, -half + 10], E: [half - 10, -half + 12], S: [half - 12, half - 10], W: [-half + 10, half - 12] }[side];
+    const side = rotateDirection(
+      piece.station?.side || "N",
+      (piece.rotation || 0) / 90,
+    );
+    const position = {
+      N: [-half + 12, -half + 10],
+      E: [half - 10, -half + 12],
+      S: [half - 12, half - 10],
+      W: [-half + 10, half - 12],
+    }[side];
     const color = piece.station?.color || "#e9b86e";
     const markerSize = preview ? 14 : 18;
     ctx.fillStyle = color;
-    ctx.fillRect(position[0] - markerSize / 2, position[1] - markerSize / 2, markerSize, markerSize);
+    ctx.fillRect(
+      position[0] - markerSize / 2,
+      position[1] - markerSize / 2,
+      markerSize,
+      markerSize,
+    );
     ctx.fillStyle = "#fff1cf";
-    ctx.fillRect(position[0] - markerSize / 2 + 3, position[1] - markerSize / 2 + 3, markerSize - 6, markerSize - 6);
+    ctx.fillRect(
+      position[0] - markerSize / 2 + 3,
+      position[1] - markerSize / 2 + 3,
+      markerSize - 6,
+      markerSize - 6,
+    );
     if (preview || !piece.station?.name) return;
     ctx.font = "11px DM Mono";
     ctx.textAlign = side === "E" ? "left" : side === "W" ? "right" : "center";
-    ctx.textBaseline = side === "N" ? "bottom" : side === "S" ? "top" : "middle";
-    const labelX = position[0] + (side === "E" ? markerSize / 2 + 5 : side === "W" ? -markerSize / 2 - 5 : 0);
-    const labelY = position[1] + (side === "N" ? -markerSize / 2 - 5 : side === "S" ? markerSize / 2 + 5 : 0);
+    ctx.textBaseline =
+      side === "N" ? "bottom" : side === "S" ? "top" : "middle";
+    const labelX =
+      position[0] +
+      (side === "E"
+        ? markerSize / 2 + 5
+        : side === "W"
+          ? -markerSize / 2 - 5
+          : 0);
+    const labelY =
+      position[1] +
+      (side === "N"
+        ? -markerSize / 2 - 5
+        : side === "S"
+          ? markerSize / 2 + 5
+          : 0);
     const width = ctx.measureText(piece.station.name).width + 8;
     ctx.fillStyle = "rgba(16,23,25,.9)";
-    ctx.fillRect(labelX - (side === "W" ? width : side === "E" ? 0 : width / 2), labelY - (side === "N" ? 14 : side === "S" ? 0 : 7), width, 14);
+    ctx.fillRect(
+      labelX - (side === "W" ? width : side === "E" ? 0 : width / 2),
+      labelY - (side === "N" ? 14 : side === "S" ? 0 : 7),
+      width,
+      14,
+    );
     ctx.fillStyle = color;
     ctx.fillText(piece.station.name, labelX, labelY);
   }
 
   drawTrain(train) {
-    const piece = [...this.state.pieces.values()].find((candidate) => candidate.id === train.pieceId);
+    const piece = [...this.state.pieces.values()].find(
+      (candidate) => candidate.id === train.pieceId,
+    );
     if (!piece || !train.entry || !train.exit) return;
-    const points = { N: [0, -this.cell / 2], E: [this.cell / 2, 0], S: [0, this.cell / 2], W: [-this.cell / 2, 0] };
+    const points = {
+      N: [0, -this.cell / 2],
+      E: [this.cell / 2, 0],
+      S: [0, this.cell / 2],
+      W: [-this.cell / 2, 0],
+    };
     const start = points[train.entry];
     const end = points[train.exit];
     if (!start || !end) return;
@@ -202,7 +295,10 @@ export class Renderer {
     if (train.geometry === "curve") {
       x = (1 - t) * (1 - t) * start[0] + 2 * (1 - t) * t * 0 + t * t * end[0];
       y = (1 - t) * (1 - t) * start[1] + 2 * (1 - t) * t * 0 + t * t * end[1];
-      tangent = Math.atan2(2 * (1 - t) * -start[1] + 2 * t * end[1], 2 * (1 - t) * -start[0] + 2 * t * end[0]);
+      tangent = Math.atan2(
+        2 * (1 - t) * -start[1] + 2 * t * end[1],
+        2 * (1 - t) * -start[0] + 2 * t * end[0],
+      );
     } else {
       x = start[0] + (end[0] - start[0]) * t;
       y = start[1] + (end[1] - start[1]) * t;
