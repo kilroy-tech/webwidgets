@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gold Price</title>
+  <style>
+    :root {
+      --bg: #0a1218;
+      --panel: rgba(14, 30, 40, 0.85);
+      --line: rgba(143, 206, 225, 0.15);
+      --ink: #e9f4f8;
+      --muted: #7fa8b5;
+      --gold: #f0c040;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: "Space Grotesk", system-ui, sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .card {
+      width: 384px;
+      max-width: 95vw;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: linear-gradient(160deg, rgba(18, 38, 50, 0.9), rgba(10, 24, 32, 0.85));
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3);
+      padding: 14px;
+    }
+
+    .price-main {
+      text-align: center;
+      padding: 8px 0 12px;
+    }
+
+    .price-value {
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--gold);
+      line-height: 1.1;
+    }
+
+    .price-unit {
+      font-size: 0.65rem;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .meta {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+    }
+
+    .meta-item {
+      text-align: center;
+      padding: 8px 4px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--line);
+    }
+
+    .meta-label {
+      font-size: 0.55rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .meta-value {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.8rem;
+      margin-top: 2px;
+    }
+
+    .footer {
+      margin-top: 10px;
+      text-align: center;
+      font-size: 0.55rem;
+      color: var(--muted);
+    }
+
+    .status-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: #4CC417;
+      display: inline-block;
+      margin-right: 4px;
+      vertical-align: middle;
+    }
+
+    .status-dot.error {
+      background: #E77471;
+    }
+
+    .status-dot.updating {
+      background: #f0c040;
+      box-shadow: 0 0 0 2px rgba(240, 192, 64, 0.3);
+      animation: pulse-ring 1s ease-in-out infinite;
+    }
+
+    @keyframes pulse-ring {
+      0%, 100% { box-shadow: 0 0 0 2px rgba(240, 192, 64, 0.3); }
+      50% { box-shadow: 0 0 0 6px rgba(240, 192, 64, 0.15); }
+    }
+
+    .error-msg {
+      color: #E77471;
+      text-align: center;
+      padding: 20px;
+      font-size: 0.8rem;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 20px;
+    }
+
+    .loading .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--line);
+      border-top-color: var(--gold);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="card" id="app">
+    <div class="loading" id="loadingState">
+      <div class="spinner"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initWebWidget } from "/apps/kilroy.groups/js/webwidget_sdk.js";
+
+    const GOLD_URL = "https://www.livepriceofgold.com/usa-gold-price-per-gram.html";
+    const WEBHOOK_ALIAS = "kilroy.ai.webhooks";
+    const WEBHOOK_TRIGGER = "get_url";
+
+    // Initialize SDK (auto-detects alias/guid from URL params)
+    const sdk = initWebWidget({});
+
+    // Get query parameters (token, base URL)
+    function getQuery(name) {
+      return new URL(window.location.href).searchParams.get(name) || "";
+    }
+
+    // Build the webhook endpoint URL
+    function getWebhookEndpoint() {
+      const base = (getQuery("base") || window.location.origin).replace(/\/$/, "");
+      const token = getQuery("token") || "goldprice";
+      return base + "/api/v1/pd/webhook/" +
+        encodeURIComponent(token) + "/" +
+        encodeURIComponent(WEBHOOK_ALIAS) + "/" +
+        encodeURIComponent(WEBHOOK_TRIGGER);
+    }
+
+    // Parse gold price from HTML using regex (faster, no DOMParser blocking)
+    function extractGoldPriceFromHtml(html) {
+      const match = html.match(/id="gramvalue"[^>]*>([0-9.]+)/);
+      if (match) {
+        return parseFloat(match[1]);
+      }
+
+      const fallback = html.match(/data-price="GXAUUSD"[^>]*>([0-9.]+)/);
+      if (fallback) {
+        return parseFloat(fallback[1]);
+      }
+
+      throw new Error("Could not find gold price in page HTML");
+    }
+
+    // Extract other prices using regex (no DOMParser, no blocking)
+    function extractOtherPrices(html) {
+      const result = {};
+
+      const ozMatch = html.match(/id="ozvalue"[^>]*>([0-9.]+)/);
+      if (ozMatch) result.ounce = parseFloat(ozMatch[1]);
+
+      const silverMatch = html.match(/id="silvervalue"[^>]*>([0-9.]+)/);
+      if (silverMatch) result.silver = parseFloat(silverMatch[1]);
+
+      const eurMatches = html.matchAll(/data-price="EURUSD"[^>]*>([0-9.]+)/g);
+      for (const m of eurMatches) {
+        result.eurUsd = parseFloat(m[1]);
+        break;
+      }
+
+      return result;
+    }
+
+    // Render the widget with price data
+    function render(price, otherPrices) {
+      const app = document.getElementById("app");
+
+      if (!price || isNaN(price)) {
+        // Only show error on first load; hide spinner on subsequent
+        if (!app.querySelector(".price-main")) {
+          app.innerHTML = '<div class="error-msg">Failed to load gold price.</div>';
+        }
+        return;
+      }
+
+      const ouncePrice = otherPrices.ounce || 0;
+      const silverPrice = otherPrices.silver || 0;
+      const eurUsd = otherPrices.eurUsd || 0;
+
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      const dateStr = now.toLocaleDateString([], { month: "short", day: "numeric" });
+
+      // Save current state for slash command responses
+      currentState = {
+        price: price,
+        otherPrices: { ...otherPrices },
+        lastUpdate: new Date().toISOString()
+      };
+
+      // Check if this is the first render (full-page spinner was shown)
+      const isFirstRender = !app.querySelector(".price-main");
+
+      if (isFirstRender) {
+        // Initial load: replace the full-page spinner with data
+        app.innerHTML = `
+          <div class="price-main">
+            <div class="price-value">$${price.toFixed(2)}</div>
+            <div class="price-unit">per gram · 24K gold</div>
+          </div>
+
+          <div class="meta">
+            <div class="meta-item">
+              <div class="meta-label">Per Ounce</div>
+              <div class="meta-value">$${(ouncePrice || 0).toFixed(2)}</div>
+            </div>
+            <div class="meta-item">
+              <div class="meta-label">Silver</div>
+              <div class="meta-value">$${(silverPrice || 0).toFixed(2)}</div>
+            </div>
+            <div class="meta-item">
+              <div class="meta-label">EUR/USD</div>
+              <div class="meta-value">${eurUsd.toFixed(4)}</div>
+            </div>
+          </div>
+
+          <div class="footer">
+            <span class="status-dot" title="Operational"></span>${dateStr} ${timeStr} · livepriceofgold.com
+          </div>
+        `;
+      } else if (app.querySelector(".error-msg")) {
+        // Recover from error: re-render with data
+        const footer = app.querySelector(".footer");
+        if (footer) {
+          footer.innerHTML = `<span class="status-dot"></span>${dateStr} ${timeStr} · livepriceofgold.com`;
+        }
+      } else {
+        // Subsequent update: update in place, turn dot green immediately
+        const footer = app.querySelector(".footer");
+        if (footer) {
+          footer.innerHTML = `<span class="status-dot" title="Operational"></span>${dateStr} ${timeStr} · livepriceofgold.com`;
+          // Update price and meta values
+          const priceValue = app.querySelector(".price-value");
+          if (priceValue) priceValue.textContent = "$" + price.toFixed(2);
+          const metaValues = app.querySelectorAll(".meta-value");
+          if (metaValues[0]) metaValues[0].textContent = "$" + (ouncePrice || 0).toFixed(2);
+          if (metaValues[1]) metaValues[1].textContent = "$" + (silverPrice || 0).toFixed(2);
+          if (metaValues[2]) metaValues[2].textContent = eurUsd.toFixed(4);
+        }
+      }
+    }
+
+    // Show full-page loading spinner (initial load only)
+    function showLoading() {
+      const app = document.getElementById("app");
+      if (!app.querySelector(".loading")) {
+        app.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+      }
+    }
+
+    // Main fetch function
+    async function fetchGoldPrice() {
+      const endpoint = getWebhookEndpoint();
+
+      // Show yellow throbbing dot immediately when update starts
+      const footer = document.querySelector(".footer");
+      if (footer) {
+        footer.innerHTML = `<span class="status-dot updating" title="Updating..."></span>${new Date().toLocaleDateString([], { month: "short", day: "numeric" })} ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · livepriceofgold.com`;
+      }
+
+      try {
+        // Call Kilroy's backend to fetch the HTML page (no CORS issues!)
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            from: "gold-price-widget",
+            type: "text/plain",
+            text: "fetch " + GOLD_URL,
+            sync: true,
+            tfrom: "gold-price-widget",
+            tusername: "widget",
+            tagentname: "gold-price-widget",
+            args: [{ text: GOLD_URL }],
+            targs: JSON.stringify({
+              url: GOLD_URL,
+              content_type: "text/html"
+            })
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error("HTTP " + response.status);
+        }
+
+        // Parse the JSON response from Kilroy's backend
+        const payload = await response.json();
+
+        // Extract the HTML from args.results.args[0].text (same structure Radio Paradise uses)
+        const textCandidate =
+          payload?.args?.results?.args?.[0]?.text ||
+          payload?.output?.args?.[0]?.text ||
+          payload?.results?.args?.[0]?.text ||
+          payload?.args?.[0]?.text ||
+          payload?.text;
+
+        if (typeof textCandidate !== "string") {
+          throw new Error("Webhook returned unexpected response shape");
+        }
+
+        const html = textCandidate;
+
+        // Parse the HTML in browser JavaScript using DOMParser
+        const price = extractGoldPriceFromHtml(html);
+        const otherPrices = extractOtherPrices(html);
+
+        render(price, otherPrices);
+
+      } catch (err) {
+        const app = document.getElementById("app");
+        // Show red error dot on the footer
+        const footer = app.querySelector(".footer");
+        if (footer) {
+          footer.innerHTML = `<span class="status-dot error" title="Update failed: ${err.message}"></span>${dateStr || '—'} ${timeStr || ''} · update failed`;
+        } else if (!app.querySelector(".price-main")) {
+          // First load failed: show error message
+          app.innerHTML = '<div class="error-msg">Failed to load gold price.</div>';
+        }
+      }
+    }
+
+    // Store current state for slash command responses
+    let currentState = { price: null, otherPrices: {}, lastUpdate: null };
+
+    // Start fetching when the widget is ready
+    sdk.ready.then(async () => {
+      await sdk.setMessageFilters(["/ww.gold"]);
+      showLoading();
+      fetchGoldPrice();
+      // Refresh every 5 minutes
+      setInterval(fetchGoldPrice, 5 * 60 * 1000);
+    }).catch((err) => {
+      const app = document.getElementById("app");
+      app.innerHTML = '<div class="error-msg">Widget initialization failed.</div>';
+    });
+
+    // Handle incoming slash commands
+    sdk.onMessage((event) => {
+      if (!event.message) {
+        return;
+      }
+
+      // Ignore /ww.gold.response messages
+      if (event.message.startsWith("/ww.gold.response")) {
+        return;
+      }
+
+      // Handle /ww.gold.prices with optional "local" parameter
+      if (event.message.startsWith("/ww.gold.prices")) {
+        const parts = event.message.trim().split(/\s+/);
+        console.log("[gold-price] Command received:", event.message);
+        console.log("[gold-price] Parts:", parts);
+        const isLocal = parts.length >= 2 && parts[1].toLowerCase() === "local";
+        console.log("[gold-price] isLocal:", isLocal);
+
+        if (currentState.price) {
+          const payload = JSON.stringify({
+            gold_gram: currentState.price.toFixed(2),
+            gold_ounce: (currentState.otherPrices.ounce || 0).toFixed(2),
+            silver_ounce: (currentState.otherPrices.silver || 0).toFixed(2),
+            eur_usd: (currentState.otherPrices.eurUsd || 0).toFixed(4),
+            last_update: currentState.lastUpdate
+          });
+
+          // If "local" parameter, omit /wa prefix (stays in local swarm)
+          const response = isLocal ? `/ww.gold.response ${payload}` : `/wa /ww.gold.response ${payload}`;
+          sdk.sendMessage(response, {
+            username: "gold-price-widget",
+            type: "text/plain"
+          }).catch(() => {});
+        }
+      }
+    });
+  </script>
+</body>
+</html>

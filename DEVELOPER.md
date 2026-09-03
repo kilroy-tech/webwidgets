@@ -199,6 +199,8 @@ unsubscribeLifecycle();
 
 #### Key-Value Storage
 
+Keys are stored as-provided under the widget's own KV store; no prefix is added or required.
+
 ```javascript
 // Store a persistent value (scoped to this widget instance)
 sdk.setKV("game_score", 42).then((value) => {
@@ -360,6 +362,7 @@ console.log("Game ready!");
 - Verify Faye WebSocket is accessible at `/ws`
 
 **Q: Key-value storage isn't persisting**
-- KV storage is scoped to the widget instance; refresh loses data
-- For persistence across sessions, use backend workflows instead
+- KV pairs are stored server-side in the widget's PDI global context (`webwidget_kv_store`), keyed by alias — a page refresh with the same `alias`/`guid` should retrieve prior values via `getKV()`
+- Verify `alias` is identical across page loads; a different alias reads a different, empty KV store
+- For persistence beyond a single widget instance, use backend workflows instead
 

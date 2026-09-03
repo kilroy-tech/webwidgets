@@ -18,7 +18,6 @@ A webwidget can:
 
 - `radio-paradise/` - Radio Paradise now-playing widget.
 - `trainz/` - Model railway layout and train simulation widget.
-- `sdk/` - Bundled WebWidget SDK implementation and SDK-specific notes.
 - `DEVELOPER.md` - Detailed SDK, URL bootstrap, messaging, filtering, lifecycle, and storage documentation.
 
 ## Running a Widget
@@ -33,10 +32,8 @@ Do not use a `file:` URL for a widget. See [DEVELOPER.md](DEVELOPER.md) for the 
 
 ## SDK Import
 
-A widget can import the bundled SDK with:
+A widget must import the master SDK from the `kilroy.groups` app:
 
 ```javascript
 import { initWebWidget } from "/apps/kilroy.groups/js/webwidget_sdk.js";
 ```
-
-The local copy in [`sdk/webwidget_sdk.js`](sdk/webwidget_sdk.js) is maintained here for reference, development, and distribution alongside the webwidget examples.

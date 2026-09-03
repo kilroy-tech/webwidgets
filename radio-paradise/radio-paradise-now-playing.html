@@ -99,6 +99,79 @@
       color: var(--danger);
     }
 
+    .player-id-button {
+      border: 1px solid rgba(143, 206, 225, 0.26);
+      border-radius: 6px;
+      background: rgba(52, 214, 179, 0.08);
+      color: #bfe4f2;
+      font: inherit;
+      padding: 3px 7px;
+      cursor: pointer;
+    }
+
+    .player-id-button.unset {
+      color: var(--danger);
+      border-color: rgba(255, 122, 122, 0.42);
+      background: rgba(255, 122, 122, 0.1);
+    }
+
+    .player-id-dialog {
+      width: min(320px, calc(100vw - 32px));
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #0d2330;
+      color: var(--ink);
+      box-shadow: var(--shadow);
+      padding: 16px;
+    }
+
+    .player-id-dialog::backdrop {
+      background: rgba(0, 0, 0, 0.48);
+    }
+
+    .player-id-dialog form {
+      display: grid;
+      gap: 12px;
+    }
+
+    .player-id-dialog label {
+      display: grid;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+
+    .player-id-dialog input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--ink);
+      font: 500 0.92rem "IBM Plex Mono", monospace;
+      padding: 9px 10px;
+    }
+
+    .dialog-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .dialog-actions button {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: rgba(52, 214, 179, 0.12);
+      color: var(--ink);
+      cursor: pointer;
+      font: 600 0.82rem "Space Grotesk", sans-serif;
+      padding: 7px 11px;
+    }
+
+    .dialog-actions button[value="cancel"] {
+      background: transparent;
+      color: var(--muted);
+    }
+
     .refresh-ring {
       --refresh-progress: 0%;
       width: 24px;
@@ -631,6 +704,7 @@
       <div class="hero-top">
         <h1 class="title" id="channelTitle">RP: Main Mix</h1>
         <div class="status" id="statusLine">
+          <button id="playerIdButton" class="player-id-button unset" type="button" title="Click to set ID">ID Not Set</button>
           <span id="statusText">Starting...</span>
           <span id="refreshRing" class="refresh-ring" role="progressbar" aria-label="Time until next refresh" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></span>
         </div>
@@ -671,6 +745,19 @@
     </section>
   </main>
 
+  <dialog id="playerIdDialog" class="player-id-dialog" aria-labelledby="playerIdDialogTitle">
+    <form method="dialog" id="playerIdForm">
+      <label>
+        <span id="playerIdDialogTitle">Player ID</span>
+        <input id="playerIdInput" name="player_id" autocomplete="off" spellcheck="false" />
+      </label>
+      <div class="dialog-actions">
+        <button type="submit" value="cancel" formnovalidate>Cancel</button>
+        <button type="submit" value="save">Save</button>
+      </div>
+    </form>
+  </dialog>
+
   <script type="module">
     import { initWebWidget } from "/apps/kilroy.groups/js/webwidget_sdk.js";
 
@@ -689,6 +776,8 @@
     ];
     const WEBHOOK_ALIAS = "kilroy.ai.webhooks";
     const WEBHOOK_TRIGGER = "get_url";
+    const RESPONSE_COMMAND = "/ww.rp.results";
+    const SDK_STORAGE_TIMEOUT_MS = 1500;
 
     const widgetParams = new URLSearchParams(window.location.search);
     const sdk = initWebWidget({
@@ -706,6 +795,10 @@
     const songProgressEl = document.getElementById("songProgress");
     const songDurationEl = document.getElementById("songDuration");
     const statusLineEl = document.getElementById("statusLine");
+    const playerIdButtonEl = document.getElementById("playerIdButton");
+    const playerIdDialogEl = document.getElementById("playerIdDialog");
+    const playerIdFormEl = document.getElementById("playerIdForm");
+    const playerIdInputEl = document.getElementById("playerIdInput");
     const statusTextEl = document.getElementById("statusText");
     const refreshRingEl = document.getElementById("refreshRing");
     const rowsEl = document.getElementById("rows");
@@ -727,6 +820,7 @@
     audio.volume = 0.30;
     audio.preload = "none";
     let isPlaying = false;
+    let playerState = "paused";
     let progressTimer = null;
     let currentSong = null;
 
@@ -740,10 +834,93 @@
     let refreshDuration = 0;
     let historyCollapsed = false;
     let activeChannel = CHANNELS[0];
+    let playerId = "";
+    let lastCoverBaseUrl = "https://img.radioparadise.com/";
 
     function getQuery(name) {
       const url = new URL(window.location.href);
       return url.searchParams.get(name) || "";
+    }
+
+    function logPlayerIdDiagnostic(message, details) {
+      console.log("[rp-widget] player_id " + message, details || {});
+    }
+
+    function withTimeout(promise, fallback, timeoutMs = SDK_STORAGE_TIMEOUT_MS) {
+      let timer = null;
+      const timeout = new Promise((resolve) => {
+        timer = setTimeout(() => resolve(fallback), timeoutMs);
+      });
+      return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+    }
+
+    async function resolvePlayerId() {
+      const requestedId = getQuery("id").trim();
+      logPlayerIdDiagnostic("resolve start", { requestedId, currentPlayerId: playerId, alias: sdk.alias, guid: sdk.guid });
+      if (requestedId) {
+        playerId = requestedId;
+        logPlayerIdDiagnostic("using URL id and persisting", { playerId });
+        void withTimeout(
+          sdk.setKV("player_id", playerId)
+            .then((value) => logPlayerIdDiagnostic("setKV success from URL id", { key: "player_id", value }))
+            .catch((err) => logPlayerIdDiagnostic("setKV failed from URL id", { key: "player_id", error: err && err.message ? err.message : String(err) })),
+          null
+        );
+      } else {
+        logPlayerIdDiagnostic("no URL id; reading SDK KV", { key: "player_id" });
+        playerId = await sdk.getKV("player_id", "")
+          .then((value) => {
+            logPlayerIdDiagnostic("getKV success", { key: "player_id", value });
+            return value;
+          })
+          .catch((err) => {
+            logPlayerIdDiagnostic("getKV failed", { key: "player_id", error: err && err.message ? err.message : String(err) });
+            return "";
+          });
+      }
+      logPlayerIdDiagnostic("resolve complete", { playerId });
+      renderPlayerId();
+    }
+
+    function renderPlayerId() {
+      playerIdButtonEl.textContent = playerId ? "[" + playerId + "]" : "ID Not Set";
+      playerIdButtonEl.classList.toggle("unset", !playerId);
+      playerIdButtonEl.setAttribute("aria-label", playerId ? "Edit player ID " + playerId : "Set player ID");
+      playerIdButtonEl.title = playerId ? "Click to edit ID" : "Click to set ID";
+      logPlayerIdDiagnostic("rendered", { playerId, buttonText: playerIdButtonEl.textContent });
+    }
+
+    async function savePlayerId(nextId) {
+      playerId = nextId.trim();
+      logPlayerIdDiagnostic("save requested", { playerId });
+      renderPlayerId();
+      const saved = await withTimeout(
+        sdk.setKV("player_id", playerId)
+          .then((value) => {
+            logPlayerIdDiagnostic("setKV success from dialog", { key: "player_id", value });
+            return true;
+          })
+          .catch((err) => {
+            logPlayerIdDiagnostic("setKV failed from dialog", { key: "player_id", error: err && err.message ? err.message : String(err) });
+            return false;
+          }),
+        false
+      );
+      logPlayerIdDiagnostic("save complete", { playerId, saved });
+      if (!saved) setStatus("Player ID save failed", true);
+    }
+
+    function openPlayerIdDialog() {
+      playerIdInputEl.value = playerId;
+      if (typeof playerIdDialogEl.showModal === "function") {
+        playerIdDialogEl.showModal();
+      } else {
+        const nextId = window.prompt("Player ID", playerId);
+        if (nextId !== null) void savePlayerId(nextId);
+        return;
+      }
+      playerIdInputEl.focus();
+      playerIdInputEl.select();
     }
 
     function getChannelApiUrl(channel) {
@@ -874,6 +1051,7 @@
       const songs = Array.isArray(data.song) ? data.song : [];
       const current = songs[0];
       const coverBase = data.cover_base_url || "https://img.radioparadise.com/";
+      lastCoverBaseUrl = coverBase;
 
       if (!current) {
         songTitleEl.textContent = "No track data available";
@@ -994,7 +1172,8 @@
 
     async function switchChannel(channelNumber) {
       const nextChannel = CHANNELS.find((channel) => channel.chan === Number(channelNumber));
-      if (!nextChannel || nextChannel.chan === activeChannel.chan) return;
+      if (!nextChannel) return false;
+      if (nextChannel.chan === activeChannel.chan) return true;
 
       const wasPlaying = isPlaying;
       activeChannel = nextChannel;
@@ -1009,10 +1188,13 @@
       if (wasPlaying) {
         audio.pause();
         audio.src = getStreamUrl(activeChannel);
+        playerState = "starting";
         try {
           await audio.play();
+          playerState = "playing";
         } catch (err) {
           isPlaying = false;
+          playerState = "error";
           playBtn.textContent = "▶";
           playBtn.classList.remove("playing");
           setProgressTimer(false);
@@ -1021,6 +1203,147 @@
       }
 
       await fetchNowPlaying();
+      return true;
+    }
+
+    function getNowPlayingData() {
+      const base = {
+        id: playerId,
+        channel: activeChannel.title,
+        channel_number: activeChannel.chan,
+        stream_url: getStreamUrl(activeChannel),
+        is_playing: isPlaying,
+        player_state: playerState,
+        volume_percent: Math.round(audio.volume * 100)
+      };
+
+      if (!currentSong) return base;
+
+      const coverPath = currentSong.cover_med || currentSong.cover_small || currentSong.cover || "";
+      return {
+        ...base,
+        title: currentSong.title,
+        artist: currentSong.artist,
+        album: currentSong.album,
+        year: currentSong.year,
+        song_id: currentSong.song_id,
+        listener_rating: currentSong.listener_rating,
+        cover_url: coverPath ? lastCoverBaseUrl + coverPath : "",
+        progress: {
+          elapsed: Math.max(0, (Date.now() - (currentSong.play_time || 0)) / 1000),
+          duration: (currentSong.duration || 0) / 1000
+        }
+      };
+    }
+
+    function sendResult(status, msg, isLocal) {
+      const payload = JSON.stringify({ id: playerId, status, msg });
+      const response = isLocal ? RESPONSE_COMMAND + " " + payload : "/wa " + RESPONSE_COMMAND + " " + payload;
+      return sdk.sendMessage(response, {
+        username: "radio-paradise-widget",
+        type: "text/plain"
+      }).catch(() => {});
+    }
+
+    async function startPlayback() {
+      audio.src = getStreamUrl(activeChannel);
+      playerState = "starting";
+      try {
+        await audio.play();
+        isPlaying = true;
+        playerState = "playing";
+        setProgressTimer(true);
+        playBtn.textContent = "⏸";
+        playBtn.classList.add("playing");
+        return true;
+      } catch (err) {
+        isPlaying = false;
+        playerState = "error";
+        setProgressTimer(false);
+        playBtn.textContent = "▶";
+        playBtn.classList.remove("playing");
+        setStatus("Playback could not start", true);
+        return false;
+      }
+    }
+
+    function stopPlayback() {
+      audio.pause();
+      isPlaying = false;
+      playerState = "paused";
+      setProgressTimer(false);
+      playBtn.textContent = "▶";
+      playBtn.classList.remove("playing");
+    }
+
+    function setVolumePercent(percent) {
+      const nextPercent = Number(percent);
+      if (!Number.isFinite(nextPercent) || nextPercent < 0 || nextPercent > 100) return false;
+      audio.volume = nextPercent / 100;
+      volSlider.value = String(audio.volume);
+      updateVolIcon();
+      return true;
+    }
+
+    function getHelpMarkdown() {
+      return [
+        "# Radio Paradise WebWidget Commands",
+        "",
+        "Control commands target a configured player ID:",
+        "- `/ww.rp.play <id> [local]` - Start playback",
+        "- `/ww.rp.pause <id> [local]` - Pause playback",
+        "- `/ww.rp.channel <id> <chan> [local]` - Switch channel (`0`, `1`, `2`, `3`, or `5`)",
+        "- `/ww.rp.volume <id> <percent> [local]` - Set volume from `0` to `100`",
+        "- `/ww.rp.status <id> [local]` - Return player, channel, volume, and now-playing status",
+        "- `/ww.rp.help [id] [local]` - Show this help",
+        "",
+        "Responses are sent as `/ww.rp.results { id, status, msg }`; `local` omits the `/wa` prefix.",
+        "Set or edit this widget's ID by clicking `ID Not Set` or the `[id]` label in the heading."
+      ].join("\n");
+    }
+
+    function handleSlashCommand(event) {
+      if (!event.message) return;
+      const parts = event.message.trim().split(/\s+/);
+      const command = parts[0];
+      const targetId = parts[1] || "";
+
+      if (!command.startsWith("/ww.rp.")) return;
+      if (command === "/ww.rp.help") {
+        const explicitTargetId = targetId && targetId.toLowerCase() !== "local" ? targetId : "";
+        const isLocal = parts.some((part, index) => index > 0 && part.toLowerCase() === "local");
+        if (explicitTargetId && (!playerId || explicitTargetId.toLowerCase() !== playerId.toLowerCase())) return;
+        sendResult("OK", getHelpMarkdown(), isLocal);
+        return;
+      }
+      if (!playerId) return;
+      if (targetId.toLowerCase() !== playerId.toLowerCase()) return;
+
+      if (command === "/ww.rp.play") {
+        const isLocal = (parts[2] || "").toLowerCase() === "local";
+        startPlayback().then((ok) => {
+          sendResult(ok ? "OK" : "ERR", ok ? "Playback started" : "Playback could not start", isLocal);
+        });
+      } else if (command === "/ww.rp.pause") {
+        const isLocal = (parts[2] || "").toLowerCase() === "local";
+        stopPlayback();
+        sendResult("OK", "Playback paused", isLocal);
+      } else if (command === "/ww.rp.channel") {
+        const channelArg = parts[2];
+        const isLocal = (parts[3] || "").toLowerCase() === "local";
+        switchChannel(Number(channelArg)).then((ok) => {
+          const nextChannel = CHANNELS.find((channel) => channel.chan === Number(channelArg));
+          sendResult(ok ? "OK" : "ERR", ok ? "Switched to " + nextChannel.title : "Unknown channel: " + channelArg, isLocal);
+        });
+      } else if (command === "/ww.rp.volume") {
+        const volumeArg = parts[2];
+        const isLocal = (parts[3] || "").toLowerCase() === "local";
+        const ok = setVolumePercent(volumeArg);
+        sendResult(ok ? "OK" : "ERR", ok ? "Volume set to " + Math.round(audio.volume * 100) + "%" : "Volume must be 0-100", isLocal);
+      } else if (command === "/ww.rp.status") {
+        const isLocal = (parts[2] || "").toLowerCase() === "local";
+        sendResult("OK", JSON.stringify(getNowPlayingData()), isLocal);
+      }
     }
 
     async function fetchNowPlaying() {
@@ -1096,24 +1419,25 @@
 
     playBtn.addEventListener("click", () => {
       if (isPlaying) {
-        audio.pause();
-        isPlaying = false;
-        setProgressTimer(false);
-        playBtn.textContent = "▶";
-        playBtn.classList.remove("playing");
+        stopPlayback();
       } else {
-        audio.src = getStreamUrl(activeChannel);
-        audio.play().catch(() => {});
-        isPlaying = true;
-        setProgressTimer(true);
-        playBtn.textContent = "⏸";
-        playBtn.classList.add("playing");
+        startPlayback();
       }
     });
 
+    playerIdButtonEl.addEventListener("click", openPlayerIdDialog);
+
+    playerIdFormEl.addEventListener("submit", (event) => {
+      event.preventDefault();
+      if (event.submitter && event.submitter.value === "cancel") {
+        playerIdDialogEl.close();
+        return;
+      }
+      savePlayerId(playerIdInputEl.value).then(() => playerIdDialogEl.close());
+    });
+
     volSlider.addEventListener("input", () => {
-      audio.volume = Number(volSlider.value);
-      updateVolIcon();
+      setVolumePercent(Number(volSlider.value) * 100);
     });
 
     channelSelect.addEventListener("change", () => {
@@ -1129,10 +1453,23 @@
 
     initializeChannelSelector();
     hydrateDefaults();
-    sdk.ready.then(() => fetchNowPlaying()).catch((err) => {
-      setStatus("Widget init failed: " + (err && err.message ? err.message : String(err)), true);
+    sdk.onMessage(handleSlashCommand);
+    renderPlayerId();
+    let widgetStarted = false;
+    async function startWidget() {
+      if (widgetStarted) return;
+      widgetStarted = true;
+      logPlayerIdDiagnostic("startup", { alias: sdk.alias, guid: sdk.guid });
+      void sdk.setMessageFilters(["/ww.rp"]).catch(() => {});
+      void resolvePlayerId();
       fetchNowPlaying();
+    }
+
+    sdk.ready.then(startWidget).catch((err) => {
+      setStatus("Widget init failed: " + (err && err.message ? err.message : String(err)), true);
+      startWidget();
     });
+    setTimeout(startWidget, SDK_STORAGE_TIMEOUT_MS);
   </script>
 </body>
 </html>
