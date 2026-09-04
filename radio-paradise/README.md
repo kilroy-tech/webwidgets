@@ -62,6 +62,20 @@ sdk.setKV("player_id", playerId);
 sdk.getKV("player_id", "");
 ```
 
+## Restored Player Settings
+
+The widget also persists channel, volume, and whether playback was active in one SDK KV object using the exact key `player_settings`:
+
+```json
+{
+  "channel_number": 1,
+  "volume_percent": 40,
+  "player_state": "playing"
+}
+```
+
+On page load or reload, the widget attempts to restore `player_settings`. It applies the saved channel and volume first, then attempts to resume playback if `player_state` was `playing`. Browser autoplay policy may still block automatic playback; in that case the widget remains loaded and reports an error state.
+
 ## Slash Commands
 
 All commands use the `/ww.rp` namespace. Control/status commands take the target player ID as their first argument. If the target ID does not match this widget's configured ID, the widget silently ignores the command.

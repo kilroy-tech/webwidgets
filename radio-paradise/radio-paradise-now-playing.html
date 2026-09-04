@@ -778,6 +778,7 @@
     const WEBHOOK_TRIGGER = "get_url";
     const RESPONSE_COMMAND = "/ww.rp.results";
     const SDK_STORAGE_TIMEOUT_MS = 1500;
+    const PLAYER_SETTINGS_KEY = "player_settings";
 
     const widgetParams = new URLSearchParams(window.location.search);
     const sdk = initWebWidget({
@@ -836,6 +837,8 @@
     let activeChannel = CHANNELS[0];
     let playerId = "";
     let lastCoverBaseUrl = "https://img.radioparadise.com/";
+    let restoringPlayerSettings = false;
+    let playerSettingsSaveTimer = null;
 
     function getQuery(name) {
       const url = new URL(window.location.href);
@@ -1173,10 +1176,16 @@
     async function switchChannel(channelNumber) {
       const nextChannel = CHANNELS.find((channel) => channel.chan === Number(channelNumber));
       if (!nextChannel) return false;
-      if (nextChannel.chan === activeChannel.chan) return true;
+      if (nextChannel.chan === activeChannel.chan) {
+        channelSelect.value = String(activeChannel.chan);
+        persistPlayerSettings("channel");
+        return true;
+      }
 
       const wasPlaying = isPlaying;
       activeChannel = nextChannel;
+      channelSelect.value = String(activeChannel.chan);
+      persistPlayerSettings("channel");
       currentSong = null;
       clearInterval(progressTimer);
       progressTimer = null;
@@ -1192,6 +1201,7 @@
         try {
           await audio.play();
           playerState = "playing";
+          persistPlayerSettings("channel-playback-resumed");
         } catch (err) {
           isPlaying = false;
           playerState = "error";
@@ -1245,6 +1255,74 @@
       }).catch(() => {});
     }
 
+    function getPlayerSettings() {
+      return {
+        channel_number: activeChannel.chan,
+        volume_percent: Math.round(audio.volume * 100),
+        player_state: isPlaying ? "playing" : "paused"
+      };
+    }
+
+    function persistPlayerSettings(reason) {
+      if (restoringPlayerSettings) return;
+      clearTimeout(playerSettingsSaveTimer);
+      const delayMs = reason === "volume" ? 300 : 0;
+      playerSettingsSaveTimer = setTimeout(() => {
+        const settings = getPlayerSettings();
+        console.log("[rp-widget] player_settings save", { reason, settings });
+        void withTimeout(
+          sdk.setKV(PLAYER_SETTINGS_KEY, settings)
+            .then((value) => console.log("[rp-widget] player_settings setKV success", { key: PLAYER_SETTINGS_KEY, value }))
+            .catch((err) => console.log("[rp-widget] player_settings setKV failed", { key: PLAYER_SETTINGS_KEY, error: err && err.message ? err.message : String(err) })),
+          null
+        );
+      }, delayMs);
+    }
+
+    function parsePlayerSettings(value) {
+      if (!value) return null;
+      if (typeof value === "object") return value;
+      if (typeof value !== "string") return null;
+      try {
+        const parsed = JSON.parse(value);
+        return parsed && typeof parsed === "object" ? parsed : null;
+      } catch (_err) {
+        return null;
+      }
+    }
+
+    async function restorePlayerSettings() {
+      console.log("[rp-widget] player_settings restore start", { key: PLAYER_SETTINGS_KEY });
+      const storedSettings = await sdk.getKV(PLAYER_SETTINGS_KEY, null)
+        .then((value) => {
+          console.log("[rp-widget] player_settings getKV success", { key: PLAYER_SETTINGS_KEY, value });
+          return value;
+        })
+        .catch((err) => {
+          console.log("[rp-widget] player_settings getKV failed", { key: PLAYER_SETTINGS_KEY, error: err && err.message ? err.message : String(err) });
+          return null;
+        });
+      const settings = parsePlayerSettings(storedSettings);
+      if (!settings || typeof settings !== "object") return;
+
+      restoringPlayerSettings = true;
+      const restoredChannel = CHANNELS.find((channel) => channel.chan === Number(settings.channel_number));
+      if (restoredChannel) {
+        activeChannel = restoredChannel;
+        channelSelect.value = String(activeChannel.chan);
+      }
+      if (Object.prototype.hasOwnProperty.call(settings, "volume_percent")) {
+        setVolumePercent(settings.volume_percent);
+      }
+      restoringPlayerSettings = false;
+      console.log("[rp-widget] player_settings restore applied", { settings: getPlayerSettings(), shouldResume: settings.player_state === "playing" });
+
+      if (settings.player_state === "playing") {
+        void startPlayback();
+      }
+      await fetchNowPlaying();
+    }
+
     async function startPlayback() {
       audio.src = getStreamUrl(activeChannel);
       playerState = "starting";
@@ -1255,6 +1333,7 @@
         setProgressTimer(true);
         playBtn.textContent = "⏸";
         playBtn.classList.add("playing");
+        persistPlayerSettings("play");
         return true;
       } catch (err) {
         isPlaying = false;
@@ -1274,6 +1353,7 @@
       setProgressTimer(false);
       playBtn.textContent = "▶";
       playBtn.classList.remove("playing");
+      persistPlayerSettings("pause");
     }
 
     function setVolumePercent(percent) {
@@ -1282,6 +1362,7 @@
       audio.volume = nextPercent / 100;
       volSlider.value = String(audio.volume);
       updateVolIcon();
+      persistPlayerSettings("volume");
       return true;
     }
 
@@ -1462,6 +1543,7 @@
       logPlayerIdDiagnostic("startup", { alias: sdk.alias, guid: sdk.guid });
       void sdk.setMessageFilters(["/ww.rp"]).catch(() => {});
       void resolvePlayerId();
+      void restorePlayerSettings();
       fetchNowPlaying();
     }
 
