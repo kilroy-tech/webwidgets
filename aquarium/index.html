@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Aquarium</title>
+<style>
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: #000;
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  #app {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #000;
+  }
+  canvas {
+    image-rendering: pixelated;
+    width: 100vw;
+    height: 100vh;
+    touch-action: none;
+    cursor: pointer;
+  }
+  #bottom-bar {
+    position: fixed;
+    bottom: 10px;
+    left: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    pointer-events: none;
+    color: #4a8;
+    font-size: 12px;
+    letter-spacing: 0.05em;
+  }
+  #hint {
+    opacity: 0.7;
+  }
+  #breed-control {
+    position: relative;
+    pointer-events: auto;
+    opacity: 0.7;
+  }
+  #breed-control:hover,
+  #breed-control.open {
+    opacity: 1;
+  }
+  #breed-toggle {
+    border: 1px solid rgba(68, 170, 136, 0.45);
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.5);
+    color: inherit;
+    font: inherit;
+    letter-spacing: inherit;
+    padding: 2px 9px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  #breed-panel {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 0;
+    display: none;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid rgba(68, 170, 136, 0.45);
+    border-radius: 8px;
+    background: rgba(0, 12, 8, 0.92);
+    white-space: nowrap;
+  }
+  #breed-control:hover #breed-panel,
+  #breed-control.open #breed-panel {
+    display: flex;
+  }
+  /* Transparent bridge across the gap so travelling to the panel doesn't
+     trigger mouseleave on the control. */
+  #breed-panel::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    height: 10px;
+  }
+  #breed-slider {
+    width: 130px;
+    accent-color: #4a8;
+    cursor: pointer;
+  }
+  #breed-value {
+    min-width: 34px;
+    text-align: right;
+  }
+</style>
+</head>
+<body>
+  <div id="app">
+    <canvas id="aquarium-canvas" aria-label="Aquarium"></canvas>
+  </div>
+  <div id="bottom-bar">
+    <div id="breed-control">
+      <div id="breed-panel">
+        <label for="breed-slider">breeding</label>
+        <input id="breed-slider" type="range" min="1" max="60" step="1" value="10"
+               aria-label="Minutes between births" />
+        <span id="breed-value">10m</span>
+      </div>
+      <button id="breed-toggle" type="button" aria-expanded="false">⚙ 10m</button>
+    </div>
+    <div id="hint">click to feed</div>
+  </div>
+
+  <script type="module">
+    import { initWebWidget } from "/apps/kilroy.groups/js/webwidget_sdk.js";
+    import { createAquariumEngine } from "./lib-aquarium/engine.js";
+    import { createFixedEnvironment } from "./lib-aquarium/environment.js";
+    import { createAquariumFramebuffer } from "./lib-aquarium/framebuffer.js";
+    import { CanvasAquariumRenderer, RENDER_STYLES, SCALE_MODES } from "./lib-aquarium/renderer.js";
+    import { parseAquariumState, serializeAquariumState } from "./lib-aquarium/state.js";
+
+    const widgetParams = new URLSearchParams(window.location.search);
+    const sdk = initWebWidget({
+      alias: widgetParams.get("alias") || widgetParams.get("webwidget_alias") || "kilroypublic.aquarium",
+      guid: widgetParams.get("guid") || widgetParams.get("webwidget_guid") || `aquarium-${Date.now()}`,
+      focusBridgeEnabled: true,
+      targetOrigin: window.location.origin,
+    });
+    sdk.ready.catch(() => {});
+
+    const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
+    // Roughly how many CSS pixels each simulation cell should occupy, so the
+    // sim's logical grid always matches the viewport's aspect ratio exactly.
+    const TARGET_CELL_SIZE = 4;
+    const MIN_LOGICAL = 40;
+    const MAX_LOGICAL = 220;
+
+    // One fish per this many logical cells sets the population cap; the tank
+    // starts sparse and breeds up to it.
+    const CELLS_PER_FISH = 900;
+    const MIN_FISH = 5;
+    const MAX_FISH = 60;
+
+    const readNumberParam = (name, fallback, min, max) => {
+      const raw = widgetParams.get(name);
+      if (raw === null) return fallback;
+      const value = Number(raw);
+      return Number.isFinite(value) ? clamp(value, min, max) : fallback;
+    };
+
+    // ?fish= starting count, ?max= population cap, ?breed= minutes between births
+    const startFish = readNumberParam("fish", MIN_FISH, 1, MAX_FISH);
+    const maxFishParam = widgetParams.get("max");
+    const BREED_MIN_MINUTES = 1;
+    const BREED_MAX_MINUTES = 60;
+    const BREED_KV_KEY = "breed_interval_minutes";
+    let breedIntervalMinutes = readNumberParam("breed", 10, BREED_MIN_MINUTES, BREED_MAX_MINUTES);
+
+    const MS_PER_SIM_DAY = 24 * 60 * 60 * 1000;
+
+    const environment = createFixedEnvironment();
+    const canvas = document.getElementById("aquarium-canvas");
+    const renderer = new CanvasAquariumRenderer(canvas, {
+      renderStyle: RENDER_STYLES.DOTS,
+      scaleMode: SCALE_MODES.FIT,
+    });
+
+    let mode;
+    let framebuffer;
+    let engine;
+    let touchPoint = null;
+    let lastFrameTime = 0;
+    let simTime = 0;
+    let lastHintText = "";
+
+    const hintEl = document.getElementById("hint");
+    const HINT_BASE = "click to feed";
+
+    const breedControlEl = document.getElementById("breed-control");
+    const breedToggleEl = document.getElementById("breed-toggle");
+    const breedSliderEl = document.getElementById("breed-slider");
+    const breedValueEl = document.getElementById("breed-value");
+
+    const buildModeForViewport = () => {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      let logicalWidth = Math.round(width / TARGET_CELL_SIZE);
+      let logicalHeight = Math.round(height / TARGET_CELL_SIZE);
+
+      // Scale both dimensions together so the logical grid's aspect ratio
+      // always matches the viewport's, even on very wide/tall windows.
+      const maxDim = Math.max(logicalWidth, logicalHeight);
+      if (maxDim > MAX_LOGICAL) {
+        const scale = MAX_LOGICAL / maxDim;
+        logicalWidth = Math.round(logicalWidth * scale);
+        logicalHeight = Math.round(logicalHeight * scale);
+      }
+      const minDim = Math.min(logicalWidth, logicalHeight);
+      if (minDim < MIN_LOGICAL) {
+        const scale = MIN_LOGICAL / minDim;
+        logicalWidth = Math.round(logicalWidth * scale);
+        logicalHeight = Math.round(logicalHeight * scale);
+      }
+
+      return {
+        id: "responsive-viewport",
+        logicalWidth: Math.max(1, logicalWidth),
+        logicalHeight: Math.max(1, logicalHeight),
+        physicalWidth: width,
+        physicalHeight: height,
+      };
+    };
+
+    // Rebuilding the sim from scratch on resize is simplest and avoids
+    // trying to remap fish/plant/boid positions across a new grid size.
+    const restartSimulationForViewport = ({ fishDefinitions = null, lastBreedTime = null } = {}) => {
+      mode = buildModeForViewport();
+
+      canvas.width = mode.physicalWidth;
+      canvas.height = mode.physicalHeight;
+      renderer.targetWidth = mode.physicalWidth;
+      renderer.targetHeight = mode.physicalHeight;
+
+      // Carry the existing roster across so a resize doesn't restart the tank.
+      const definitions = fishDefinitions ?? engine?.getFishDefinitions() ?? null;
+      const breedAnchor = lastBreedTime ?? engine?.getLastBreedTime() ?? null;
+
+      framebuffer = createAquariumFramebuffer(mode);
+      const fittedCap = clamp(
+        Math.round((mode.logicalWidth * mode.logicalHeight) / CELLS_PER_FISH),
+        MIN_FISH,
+        MAX_FISH,
+      );
+      const maxFish = maxFishParam === null ? fittedCap : clamp(Number(maxFishParam) || fittedCap, 1, MAX_FISH);
+      engine = createAquariumEngine({
+        mode,
+        environment,
+        disableStateLoad: true,
+        fishDefinitions: definitions,
+        lastBreedTime: breedAnchor,
+        initialFishCount: Math.min(startFish, maxFish),
+        idealFishCount: maxFish,
+        breedIntervalMinutes,
+      });
+      touchPoint = null;
+    };
+    restartSimulationForViewport();
+
+    let resizeTimer = null;
+    window.addEventListener("resize", () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => restartSimulationForViewport(), 200);
+    });
+
+    const renderFrame = (now) => {
+      const delta = lastFrameTime ? Math.min(80, now - lastFrameTime) : 0;
+      lastFrameTime = now;
+      simTime += delta;
+
+      engine.update({ now: simTime, delta, framebuffer, environment, touchPoint });
+      renderer.presentFramebuffer(framebuffer, {
+        scaleMode: SCALE_MODES.FIT,
+        renderStyle: RENDER_STYLES.DOTS,
+        clearForeground: true,
+      });
+
+      const hintText = `${HINT_BASE} · day ${(simTime / MS_PER_SIM_DAY).toFixed(2)}`;
+      if (hintText !== lastHintText) {
+        hintEl.textContent = hintText;
+        lastHintText = hintText;
+      }
+
+      requestAnimationFrame(renderFrame);
+    };
+    requestAnimationFrame(renderFrame);
+
+    const feedAt = (event) => {
+      const point = renderer.pointerToLogical(event);
+      if (!point) return;
+      touchPoint = point;
+      engine.onTouchStarted({ point, now: simTime });
+    };
+
+    canvas.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      canvas.setPointerCapture?.(event.pointerId);
+      feedAt(event);
+    });
+    canvas.addEventListener("pointermove", (event) => {
+      if (event.buttons) feedAt(event);
+    });
+    window.addEventListener("pointerup", () => {
+      touchPoint = null;
+      engine.onTouchReleased();
+    });
+
+    let breedSaveTimer = null;
+    const applyBreedInterval = (minutes, { persist = true } = {}) => {
+      breedIntervalMinutes = clamp(Math.round(Number(minutes) || 0), BREED_MIN_MINUTES, BREED_MAX_MINUTES);
+      breedSliderEl.value = String(breedIntervalMinutes);
+      breedValueEl.textContent = `${breedIntervalMinutes}m`;
+      breedToggleEl.textContent = `⚙ ${breedIntervalMinutes}m`;
+      engine.setBreedIntervalMinutes(breedIntervalMinutes);
+
+      if (!persist) return;
+      clearTimeout(breedSaveTimer);
+      breedSaveTimer = setTimeout(() => {
+        sdk.setKV(BREED_KV_KEY, breedIntervalMinutes).catch(() => {});
+      }, 300);
+    };
+
+    breedSliderEl.addEventListener("input", () => applyBreedInterval(breedSliderEl.value));
+
+    // Keep slider drags and taps from reaching the canvas as food drops.
+    breedControlEl.addEventListener("pointerdown", (event) => event.stopPropagation());
+
+    const setBreedPanelOpen = (open) => {
+      breedControlEl.classList.toggle("open", open);
+      breedToggleEl.setAttribute("aria-expanded", String(open));
+    };
+
+    breedToggleEl.addEventListener("click", () => {
+      setBreedPanelOpen(!breedControlEl.classList.contains("open"));
+    });
+    breedControlEl.addEventListener("mouseleave", () => setBreedPanelOpen(false));
+    document.addEventListener("pointerdown", (event) => {
+      if (!breedControlEl.contains(event.target)) setBreedPanelOpen(false);
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") setBreedPanelOpen(false);
+    });
+
+    applyBreedInterval(breedIntervalMinutes, { persist: false });
+
+    // A stored value wins over the URL default, but must never stall startup.
+    sdk.getKV(BREED_KV_KEY, null)
+      .then((stored) => {
+        if (stored === null || stored === undefined || stored === "") return;
+        const minutes = Number(stored);
+        if (Number.isFinite(minutes)) applyBreedInterval(minutes, { persist: false });
+      })
+      .catch(() => {});
+
+    const STATE_KV_KEY = "aquarium_state";
+    const STATE_SAVE_INTERVAL_MS = 60 * 1000;
+
+    const saveAquariumState = () => {
+      if (!engine) return;
+      const payload = {
+        ...serializeAquariumState(engine.getFishDefinitions()),
+        simTime,
+        lastBreedTime: engine.getLastBreedTime(),
+      };
+      return sdk.setKV(STATE_KV_KEY, payload).catch(() => {});
+    };
+
+    setInterval(saveAquariumState, STATE_SAVE_INTERVAL_MS);
+    window.addEventListener("pagehide", saveAquariumState);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") saveAquariumState();
+    });
+
+    // Fish ages resume where they left off; elapsed time while closed is ignored.
+    sdk.getKV(STATE_KV_KEY, null)
+      .then((stored) => {
+        if (!stored) return;
+        const raw = typeof stored === "string" ? JSON.parse(stored) : stored;
+        const { fishes } = parseAquariumState(raw);
+        if (!fishes.length) return;
+
+        simTime = Number.isFinite(Number(raw.simTime)) ? Number(raw.simTime) : simTime;
+        const lastBreedTime = Number.isFinite(Number(raw.lastBreedTime)) ? Number(raw.lastBreedTime) : null;
+        restartSimulationForViewport({ fishDefinitions: fishes, lastBreedTime });
+      })
+      .catch(() => {});
+  </script>
+</body>
+</html>
