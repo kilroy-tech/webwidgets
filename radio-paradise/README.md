@@ -98,6 +98,8 @@ Channel values are the same numeric values used by the widget dropdown:
 | `2` | RockIt! |
 | `3` | The Globe |
 | `5` | Beyond... |
+| `42` | Serenity |
+| `945` | KFAT |
 
 ## Responses
 
