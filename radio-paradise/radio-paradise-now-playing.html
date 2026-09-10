@@ -51,7 +51,7 @@
 
     .wrap {
       width: min(1060px, 96vw);
-      margin: 34px auto 64px;
+      margin: 2vw auto 64px;
       animation: fade-up 360ms ease-out;
     }
 
@@ -196,11 +196,14 @@
       margin-top: 16px;
       display: grid;
       grid-template-columns: 136px 1fr;
+      grid-template-rows: auto auto;
       gap: 14px;
       align-items: start;
     }
 
     .song-info {
+      grid-column: 2;
+      grid-row: 1;
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
       gap: 14px;
@@ -209,6 +212,8 @@
     }
 
     .cover {
+      grid-column: 1;
+      grid-row: 1 / span 2;
       width: 136px;
       height: 136px;
       border-radius: 14px;
@@ -374,7 +379,9 @@
     }
 
     .player {
-      margin-top: 14px;
+      grid-column: 2;
+      grid-row: 2;
+      margin-top: 0;
       display: flex;
       align-items: center;
       gap: 12px;
@@ -489,7 +496,7 @@
       outline: none;
     }
 
-    @media (max-width: 760px) {
+    @media (max-width: 640px) {
       .player {
         padding: 8px 12px;
         gap: 10px;
@@ -576,10 +583,10 @@
       to { opacity: 1; transform: translateY(0); }
     }
 
-    @media (max-width: 760px) {
+    @media (max-width: 640px) {
       .wrap {
         width: 98vw;
-        margin: 24px auto 48px;
+        margin: 1vw auto 48px;
       }
 
       .title {
@@ -588,6 +595,17 @@
 
       .now {
         grid-template-columns: 1fr;
+      }
+
+      .cover,
+      .song-info,
+      .player {
+        grid-column: auto;
+        grid-row: auto;
+      }
+
+      .player {
+        margin-top: 14px;
       }
 
       .cover {
@@ -631,7 +649,7 @@
 
       .wrap {
         width: 95vw;
-        margin: 20px auto 48px;
+        margin: 2.5vw auto 48px;
       }
 
       .hero-top {
@@ -653,9 +671,22 @@
       }
 
       .cover {
+        grid-column: 1;
+        grid-row: 1 / span 2;
         width: 80px;
         height: 80px;
         border-radius: 8px;
+      }
+
+      .song-info {
+        grid-column: 2;
+        grid-row: 1;
+      }
+
+      .player {
+        grid-column: 2;
+        grid-row: 2;
+        margin-top: 0;
       }
 
       .song-title {
@@ -723,17 +754,17 @@
           </div>
           <div id="ratingIndicator" class="rating-indicator empty" aria-label="Listener rating">--</div>
         </div>
-      </div>
 
-      <!-- Audio Player -->
-      <section class="player">
-        <button id="playBtn" class="play-btn" title="Play / Pause">▶</button>
-        <select id="channelSelect" class="channel-select" aria-label="Radio Paradise channel"></select>
-        <div class="volume-wrap">
-          <span id="volIcon" class="volume-icon">🔊</span>
-          <input type="range" id="volSlider" class="volume-slider" min="0" max="1" step="0.01" value="0.30" />
-        </div>
-      </section>
+        <!-- Audio Player -->
+        <section class="player">
+          <button id="playBtn" class="play-btn" title="Play / Pause">▶</button>
+          <select id="channelSelect" class="channel-select" aria-label="Radio Paradise channel"></select>
+          <div class="volume-wrap">
+            <span id="volIcon" class="volume-icon">🔊</span>
+            <input type="range" id="volSlider" class="volume-slider" min="0" max="1" step="0.01" value="0.30" />
+          </div>
+        </section>
+      </div>
     </section>
 
     <section class="history">
