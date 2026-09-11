@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MyPlace 3D</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="topbar">
+  <span class="title">🌍 MyPlace 3D</span>
+  <span id="status" class="status">Initializing…</span>
+</div>
+<div id="lobby">
+  <div class="lobby-content">
+    <h2>Welcome to MyPlace 3D</h2>
+    <div class="lobby-field">
+      <label for="username-input">Username:</label>
+      <input id="username-input" type="text" placeholder="Enter your username…" maxlength="20" autofocus>
+    </div>
+    <button id="lobby-start">Start</button>
+    <p class="lobby-note">Click the game to lock your mouse for camera control</p>
+  </div>
+</div>
+<div id="loading">
+  <div class="spinner"></div>
+  <div>Loading 3D World…</div>
+</div>
+<div id="instructions">
+  <h3>Controls</h3>
+  <p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move</p>
+  <p><kbd>Shift</kbd> Run</p>
+  <p><kbd>Space</kbd> Jump</p>
+  <p><kbd>C</kbd> Toggle Chat</p>
+  <p><kbd>Esc</kbd> Toggle Pointer Lock</p>
+</div>
+<div id="canvas-container"></div>
+<div id="chat-panel">
+  <div id="chat-messages"></div>
+  <div id="chat-input-row">
+    <input id="chat-input" type="text" placeholder="Type a message…" maxlength="200">
+    <button id="chat-send">Send</button>
+  </div>
+</div>
+<div id="chat-toast">
+  <div id="toast-messages"></div>
+</div>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import { initWebWidget } from "/apps/kilroy.groups/js/webwidget_sdk.js";
+import { startGame } from "./js/main.js";
+const params = new URLSearchParams(window.location.search);
+const alias = params.get("alias") || "myplace.default";
+const guid = params.get("guid") || generateGUID();
+const seed = params.get("seed") || "myplace-default";
+
+// Lobby UI wiring
+const lobbyEl = document.getElementById("lobby");
+const usernameInput = document.getElementById("username-input");
+const lobbyStartBtn = document.getElementById("lobby-start");
+
+lobbyStartBtn.addEventListener("click", () => {
+  const username = usernameInput.value.trim() || alias;
+  lobbyEl.style.display = "none";
+  startGame(alias, guid, seed, username);
+});
+
+usernameInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    lobbyStartBtn.click();
+  }
+});
+
+function generateGUID() {
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+    const r = (Math.random() * 16) | 0;
+    return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+</script>
+</body>
+</html>

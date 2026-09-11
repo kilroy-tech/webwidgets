@@ -1,0 +1,2435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kilroy Battleship</title>
+  <script type="module" src="/apps/kilroy.groups/js/webwidget_sdk.js"></script>
+  <style>
+    :root {
+      --bg-deep: #071a2b;
+      --bg-mid: #0f3558;
+      --bg-card: rgba(6, 22, 37, 0.78);
+      --line: #2d638a;
+      --text-main: #eaf5ff;
+      --text-soft: #9cb8cc;
+      --ok: #22a46f;
+      --warn: #ff9f1c;
+      --bad: #d44d5c;
+      --accent: #4cc9f0;
+      --board: #0b2438;
+      --cell: #123552;
+      --cell-alt: #133b5c;
+      --ship: #e8e8e8;
+      --ship-outline: #6a7a89;
+      --ship-carrier: #d7eefb;
+      --ship-battleship: #d7f6f1;
+      --ship-cruiser: #e6f6d6;
+      --ship-submarine: #fef1d3;
+      --ship-destroyer: #fde0d7;
+      --hit: #e63946;
+      --miss: #f8f9fa;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      min-height: 100vh;
+      font-family: "Trebuchet MS", "Gill Sans", "Segoe UI", sans-serif;
+      color: var(--text-main);
+      background:
+        radial-gradient(circle at 10% 10%, rgba(76, 201, 240, 0.18), transparent 35%),
+        radial-gradient(circle at 90% 80%, rgba(255, 159, 28, 0.15), transparent 28%),
+        linear-gradient(180deg, var(--bg-mid) 0%, var(--bg-deep) 65%);
+      display: flex;
+      justify-content: center;
+      align-items: stretch;
+      padding: 14px;
+    }
+
+    .app {
+      width: min(1200px, 100%);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .hud {
+      background: var(--bg-card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 10px 12px;
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr;
+      gap: 8px;
+      backdrop-filter: blur(6px);
+    }
+
+    .hud-title {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.86rem;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(20, 66, 102, 0.35);
+      margin-right: 6px;
+      white-space: nowrap;
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .dot-ok { background: var(--ok); }
+    .dot-warn { background: var(--warn); }
+    .dot-bad { background: var(--bad); }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(230px, 290px) 1fr;
+      gap: 10px;
+      min-height: 0;
+      flex: 1;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      background: var(--bg-card);
+      border-radius: 14px;
+      padding: 12px;
+      backdrop-filter: blur(6px);
+      overflow: auto;
+    }
+
+    .panel h2 {
+      font-size: 1rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+      color: var(--accent);
+    }
+
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .field {
+      width: 100%;
+      padding: 9px 10px;
+      border-radius: 10px;
+      border: 1px solid #356991;
+      background: rgba(10, 39, 62, 0.95);
+      color: var(--text-main);
+      font-size: 0.95rem;
+    }
+
+    .field::placeholder {
+      color: #7fa1bc;
+    }
+
+    .btn {
+      border: 1px solid #3b6d93;
+      border-radius: 10px;
+      padding: 8px 12px;
+      background: linear-gradient(180deg, #1b527c, #124062);
+      color: var(--text-main);
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.08s ease, opacity 0.2s ease, border-color 0.2s ease;
+    }
+
+    .btn:hover { border-color: #62a8d8; }
+    .btn:active { transform: translateY(1px); }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .btn-primary {
+      background: linear-gradient(180deg, #32b06f, #1c8852);
+      border-color: #57d596;
+    }
+
+    .btn-danger {
+      background: linear-gradient(180deg, #cc5863, #a23d47);
+      border-color: #e6868d;
+    }
+
+    .small {
+      font-size: 0.82rem;
+      color: var(--text-soft);
+    }
+
+    .roster {
+      margin-top: 10px;
+      border: 1px solid #2e5f86;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .roster table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+    }
+
+    .roster th,
+    .roster td {
+      text-align: left;
+      padding: 8px;
+      border-bottom: 1px solid #214b6b;
+    }
+
+    .roster tr:last-child td { border-bottom: 0; }
+
+    .roster tr[data-selected="true"] {
+      background: rgba(76, 201, 240, 0.16);
+    }
+
+    .status-badge {
+      display: inline-block;
+      border: 1px solid #4f7593;
+      border-radius: 999px;
+      padding: 3px 8px;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #d6eefe;
+      background: rgba(14, 56, 85, 0.56);
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 10px;
+      min-height: 0;
+    }
+
+    .banner {
+      min-height: 48px;
+      border: 1px dashed #3e7399;
+      border-radius: 10px;
+      padding: 10px 12px;
+      color: #ffe082;
+      background: linear-gradient(180deg, rgba(58, 48, 14, 0.75), rgba(42, 35, 11, 0.62));
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 1.04rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      text-shadow: 0 0 8px rgba(255, 230, 140, 0.2);
+      border-color: #c9aa52;
+    }
+
+    .board-status {
+      min-height: 28px;
+      border: 1px dashed #3f7195;
+      border-radius: 8px;
+      padding: 6px 8px;
+      font-size: 0.9rem;
+      color: #d0ebff;
+      background: rgba(9, 36, 56, 0.46);
+    }
+
+    .board-status.alert {
+      border-color: #d97b86;
+      color: #ffd6db;
+      background: rgba(88, 24, 34, 0.62);
+      font-weight: 700;
+    }
+
+    .board-wrap {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .board-card {
+      border: 1px solid #2f658d;
+      border-radius: 12px;
+      padding: 10px;
+      background: rgba(10, 37, 56, 0.8);
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+      gap: 8px;
+      min-height: 0;
+    }
+
+    .board-card h3 {
+      font-size: 0.95rem;
+      color: #8ed6f8;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .board {
+      --size: min(100%, 520px);
+      width: var(--size);
+      max-width: 100%;
+      aspect-ratio: 1 / 1;
+      background: var(--board);
+      border: 1px solid #2b5b80;
+      border-radius: 10px;
+      padding: 4px;
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      grid-template-rows: repeat(10, 1fr);
+      gap: 2px;
+      margin-inline: auto;
+    }
+
+    .cell {
+      border: 1px solid #1f4f72;
+      border-radius: 3px;
+      background: var(--cell);
+      transition: background 0.12s ease, transform 0.08s ease;
+      position: relative;
+      cursor: pointer;
+    }
+
+    .cell:nth-child(even) { background: var(--cell-alt); }
+    .cell:hover { transform: scale(1.02); }
+
+    .cell.ship {
+      background: linear-gradient(180deg, var(--ship), #d8e2ea);
+      border-color: var(--ship-outline);
+    }
+
+    .cell.ship.ship-carrier {
+      background: linear-gradient(180deg, var(--ship-carrier), #c0e0f3);
+    }
+
+    .cell.ship.ship-battleship {
+      background: linear-gradient(180deg, var(--ship-battleship), #bfe8de);
+    }
+
+    .cell.ship.ship-cruiser {
+      background: linear-gradient(180deg, var(--ship-cruiser), #d4e8be);
+    }
+
+    .cell.ship.ship-submarine {
+      background: linear-gradient(180deg, var(--ship-submarine), #f3ddb2);
+    }
+
+    .cell.ship.ship-destroyer {
+      background: linear-gradient(180deg, var(--ship-destroyer), #efc7ba);
+    }
+
+    .cell.preview-ok {
+      background: linear-gradient(180deg, #62c98f, #37a66b);
+    }
+
+    .cell.preview-bad {
+      background: linear-gradient(180deg, #d07883, #ac4e5a);
+    }
+
+    .cell.target-disabled {
+      cursor: default;
+      opacity: 0.65;
+    }
+
+    .cell.hit::after,
+    .cell.miss::after {
+      content: "";
+      position: absolute;
+      inset: 20%;
+      border-radius: 50%;
+      background: var(--miss);
+    }
+
+    .cell.hit::after {
+      background: var(--hit);
+      box-shadow: 0 0 10px rgba(230, 57, 70, 0.9);
+    }
+
+    .cell.pending::after {
+      content: "";
+      position: absolute;
+      inset: 25%;
+      border-radius: 50%;
+      background: #ffcb6b;
+      box-shadow: 0 0 8px rgba(255, 203, 107, 0.75);
+    }
+
+    .cell.ship-sunk {
+      background: linear-gradient(180deg, #cc5a64, #9f3741);
+      border-color: #ef9aa1;
+    }
+
+    .result-panel {
+      min-height: 46px;
+      border: 1px solid #4f7593;
+      border-radius: 10px;
+      padding: 8px 10px;
+      display: none;
+      align-items: center;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      background: rgba(12, 42, 65, 0.65);
+    }
+
+    .result-panel.win {
+      display: flex;
+      color: #b8ffd8;
+      border-color: #5ed39b;
+      background: rgba(18, 72, 48, 0.55);
+    }
+
+    .result-panel.lose {
+      display: flex;
+      color: #ffd4d8;
+      border-color: #d17881;
+      background: rgba(86, 28, 36, 0.58);
+    }
+
+    .fleet {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 6px;
+      margin-top: 8px;
+      max-height: 230px;
+      overflow: auto;
+      padding-right: 2px;
+    }
+
+    .ship-row {
+      border: 1px solid #315f85;
+      border-radius: 8px;
+      padding: 6px 8px;
+      background: rgba(7, 27, 42, 0.7);
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .ship-row[data-selected="true"] {
+      border-color: #83cdf3;
+      background: rgba(76, 201, 240, 0.15);
+    }
+
+    .ship-row[data-placed="true"] {
+      opacity: 0.72;
+    }
+
+    .ship-mini {
+      display: inline-flex;
+      gap: 2px;
+      align-items: center;
+    }
+
+    .mini-cell {
+      width: 12px;
+      height: 12px;
+      background: #dfe6eb;
+      border: 1px solid #728694;
+      border-radius: 2px;
+    }
+
+    .mini-cell.hit {
+      background: var(--hit) !important;
+      border-color: #ffb3bb !important;
+      box-shadow: 0 0 5px rgba(230, 57, 70, 0.7);
+    }
+
+    .ship-hit-meta {
+      font-size: 0.78rem;
+      color: #d0e8f7;
+      margin-right: 6px;
+      white-space: nowrap;
+    }
+
+    .ship-hit-meta.sunk {
+      color: #ffd6db;
+      font-weight: 700;
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(2, 9, 16, 0.72);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 20;
+      padding: 14px;
+    }
+
+    .modal-backdrop.show {
+      display: flex;
+      animation: fade-in 0.2s ease;
+    }
+
+    .modal {
+      width: min(480px, 100%);
+      background: linear-gradient(180deg, #153955, #0b2438);
+      border: 1px solid #4a81a8;
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+    }
+
+    .modal h3 {
+      margin-bottom: 8px;
+      font-size: 1.08rem;
+      color: #9bd8f8;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .modal .row {
+      margin-top: 10px;
+      justify-content: flex-end;
+    }
+
+    @keyframes fade-in {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @media (max-width: 760px) {
+      .hud {
+        grid-template-columns: 1fr;
+      }
+
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .board-wrap {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <section class="hud">
+      <div>
+        <div class="hud-title">Kilroy Battleship</div>
+      </div>
+      <div>
+        <span class="status-pill"><span id="dot-conn" class="dot dot-bad"></span><span id="conn-text">connecting</span></span>
+        <span class="status-pill"><span class="dot dot-warn"></span><span id="phase-text">lobby</span></span>
+      </div>
+      <div>
+        <span class="status-pill"><span class="dot dot-ok"></span><span id="self-text">not joined</span></span>
+        <span class="status-pill"><span class="dot dot-warn"></span><span id="game-text">game: none</span></span>
+      </div>
+    </section>
+
+    <section class="layout">
+      <aside class="panel">
+        <h2>Lobby</h2>
+        <div class="row" style="margin-bottom: 8px;">
+          <input id="name-input" class="field" maxlength="24" placeholder="Enter your player name" aria-label="Player name">
+        </div>
+        <div class="row" style="margin-bottom: 8px;">
+          <button id="join-btn" class="btn btn-primary">Join Lobby</button>
+          <button id="who-btn" class="btn">Refresh Roster</button>
+          <button id="back-btn" class="btn">Return to Lobby</button>
+        </div>
+        <div class="small" id="lobby-note">Select another player and invite them to play a game.</div>
+
+        <div class="roster">
+          <table>
+            <thead>
+              <tr>
+                <th>Player</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="roster-body"></tbody>
+          </table>
+        </div>
+
+        <div class="row" style="margin-top: 10px;">
+          <button id="challenge-btn" class="btn">Challenge</button>
+          <button id="clear-selection-btn" class="btn">Clear Selection</button>
+        </div>
+        <div class="small" id="selection-note"></div>
+
+        <section id="setup-panel">
+          <hr style="margin: 12px 0; border: 0; border-top: 1px solid #29567a;">
+          <h2>Fleet Setup</h2>
+          <div class="row">
+            <button id="rotate-btn" class="btn">Rotate: Horizontal</button>
+            <button id="random-btn" class="btn">Randomize</button>
+          </div>
+          <div class="row" style="margin-top: 8px;">
+            <button id="clear-board-btn" class="btn">Clear Board</button>
+            <button id="ready-btn" class="btn btn-primary">Ready to Play</button>
+          </div>
+          <div class="fleet" id="fleet-list"></div>
+        </section>
+
+        <section id="mapkey-panel" style="display:none;">
+          <hr style="margin: 12px 0; border: 0; border-top: 1px solid #29567a;">
+          <h2>Map Key</h2>
+          <div class="small" style="margin-bottom: 8px;">Ship color reference during battle.</div>
+          <div class="fleet" id="mapkey-list"></div>
+        </section>
+      </aside>
+
+      <main class="workspace">
+        <div id="banner" class="banner">Waiting in lobby.</div>
+        <div id="result-panel" class="result-panel"></div>
+        <div class="board-wrap">
+          <section class="board-card">
+            <h3>Your Waters</h3>
+            <div id="own-status" class="board-status">Place ships manually, or randomize until satisfied.</div>
+            <div id="own-board" class="board"></div>
+          </section>
+
+          <section class="board-card">
+            <h3>Target Grid</h3>
+            <div id="target-status" class="board-status">Select targets here once battle begins.</div>
+            <div id="target-board" class="board"></div>
+          </section>
+        </div>
+      </main>
+    </section>
+  </div>
+
+  <div id="challenge-modal-bg" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="challenge-title">
+    <div class="modal">
+      <h3 id="challenge-title">Incoming Challenge</h3>
+      <p id="challenge-msg" class="small"></p>
+      <p class="small" style="margin-top: 10px;">Respond within <strong id="challenge-countdown">10</strong> seconds.</p>
+      <div class="row">
+        <button id="challenge-reject" class="btn btn-danger">Reject</button>
+        <button id="challenge-accept" class="btn btn-primary">Accept</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="gameover-modal-bg" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="gameover-title">
+    <div class="modal">
+      <h3 id="gameover-title">Battle Complete</h3>
+      <p id="gameover-msg" class="small"></p>
+      <div class="row">
+        <button id="gameover-ok" class="btn btn-primary">Return to Lobby</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initWebWidget } from "/apps/kilroy.groups/js/webwidget_sdk.js";
+
+    const COMMAND_PREFIX = "/ww.bship";
+    const FILTER_PATTERN = "/ww.bship";
+    const BOARD_SIZE = 10;
+    const CHALLENGE_TIMEOUT_MS = 10000;
+    const SHOT_TIMEOUT_MS = 30000;
+    const PRESENCE_INTERVAL_MS = 5000;
+    const PEER_STALE_MS = 16000;
+
+    const SHIP_BLUEPRINTS = [
+      { id: "carrier", name: "Carrier", size: 5 },
+      { id: "battleship", name: "Battleship", size: 4 },
+      { id: "cruiser", name: "Cruiser", size: 3 },
+      { id: "submarine", name: "Submarine", size: 3 },
+      { id: "destroyer", name: "Destroyer", size: 2 }
+    ];
+
+    const state = {
+      joined: false,
+      connected: false,
+      alias: "kilroy.groups.bship",
+      selfGuid: kilroyGuid(),
+      targetOrigin: window.location.origin,
+      selfName: "",
+      phase: "lobby",
+      status: "idle",
+      selectedPeerGuid: null,
+      peers: new Map(),
+      sdk: null,
+      lifecycleState: "WIDGET_OPEN",
+      lastActivationTs: 0,
+      pollId: null,
+      activationCleanup: null,
+      resizeObserver: null,
+      challenge: null,
+      challengeTimerId: null,
+      challengeCountdownId: null,
+      turnTimerId: null,
+      turnDeadlineTs: 0,
+      game: {
+        gameId: null,
+        challengerGuid: null,
+        opponentGuid: null,
+        opponentName: null,
+        myReady: false,
+        opponentReady: false,
+        turnGuid: null,
+        pendingShot: null,
+        finished: false,
+        winnerGuid: null,
+        loserGuid: null
+      },
+      placement: {
+        orientation: "h",
+        selectedShipId: "carrier",
+        ships: cloneShips(),
+        board: createBoard()
+      },
+      targetMarks: createMarkBoard(),
+      incomingMarks: createMarkBoard(),
+      resolvedIncomingShots: {},
+      stickySunkMessage: null,
+      boardActionStatus: {
+        own: "",
+        target: ""
+      },
+      boardActionAlert: {
+        own: false,
+        target: false
+      },
+      result: {
+        outcome: null,
+        message: ""
+      }
+    };
+
+    const refs = {
+      dotConn: q("dot-conn"),
+      connText: q("conn-text"),
+      phaseText: q("phase-text"),
+      selfText: q("self-text"),
+      gameText: q("game-text"),
+      banner: q("banner"),
+      nameInput: q("name-input"),
+      joinBtn: q("join-btn"),
+      whoBtn: q("who-btn"),
+      backBtn: q("back-btn"),
+      challengeBtn: q("challenge-btn"),
+      clearSelectionBtn: q("clear-selection-btn"),
+      selectionNote: q("selection-note"),
+      rosterBody: q("roster-body"),
+      ownBoard: q("own-board"),
+      targetBoard: q("target-board"),
+      rotateBtn: q("rotate-btn"),
+      randomBtn: q("random-btn"),
+      clearBoardBtn: q("clear-board-btn"),
+      readyBtn: q("ready-btn"),
+      fleetList: q("fleet-list"),
+      mapkeyList: q("mapkey-list"),
+      setupPanel: q("setup-panel"),
+      mapkeyPanel: q("mapkey-panel"),
+      lobbyNote: q("lobby-note"),
+      ownStatus: q("own-status"),
+      targetStatus: q("target-status"),
+      resultPanel: q("result-panel"),
+      modalBg: q("challenge-modal-bg"),
+      modalMsg: q("challenge-msg"),
+      modalCountdown: q("challenge-countdown"),
+      modalAccept: q("challenge-accept"),
+      modalReject: q("challenge-reject"),
+      gameoverModalBg: q("gameover-modal-bg"),
+      gameoverMsg: q("gameover-msg"),
+      gameoverOk: q("gameover-ok")
+    };
+
+    wireEvents();
+    initSdk();
+    renderMapKey();
+    renderAll();
+
+    function q(id) {
+      return document.getElementById(id);
+    }
+
+    function wireEvents() {
+      refs.joinBtn.addEventListener("click", onJoinClicked);
+      refs.nameInput.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter") onJoinClicked();
+      });
+      refs.whoBtn.addEventListener("click", requestWho);
+      refs.backBtn.addEventListener("click", returnToLobby);
+      refs.challengeBtn.addEventListener("click", issueChallenge);
+      refs.clearSelectionBtn.addEventListener("click", () => {
+        state.selectedPeerGuid = null;
+        renderRoster();
+      });
+      refs.rotateBtn.addEventListener("click", toggleOrientation);
+      refs.randomBtn.addEventListener("click", randomizePlacement);
+      refs.clearBoardBtn.addEventListener("click", clearPlacement);
+      refs.readyBtn.addEventListener("click", markReady);
+      refs.modalAccept.addEventListener("click", acceptChallenge);
+      refs.modalReject.addEventListener("click", rejectChallenge);
+      refs.gameoverOk.addEventListener("click", acknowledgeGameOver);
+      refs.targetBoard.addEventListener("click", onTargetBoardClicked);
+
+      window.addEventListener("beforeunload", () => {
+        if (state.pollId) clearInterval(state.pollId);
+        if (state.challengeTimerId) clearTimeout(state.challengeTimerId);
+        if (state.challengeCountdownId) clearInterval(state.challengeCountdownId);
+        if (state.turnTimerId) clearInterval(state.turnTimerId);
+        if (typeof state.activationCleanup === "function") {
+          state.activationCleanup();
+          state.activationCleanup = null;
+        }
+      });
+    }
+
+    function initSdk() {
+      const boot = readStartupArgs();
+      state.alias = boot.alias || state.alias;
+      state.selfGuid = boot.guid || state.selfGuid;
+      state.targetOrigin = boot.targetOrigin || state.targetOrigin;
+
+      state.sdk = initWebWidget({
+        alias: state.alias,
+        guid: state.selfGuid,
+        focusBridgeEnabled: true,
+        targetOrigin: state.targetOrigin
+      });
+      window.webwidgetSDK = state.sdk;
+      state.sdk.onMessage(onSdkMessage);
+      state.sdk.onConnectionState(onSdkConnectionState);
+      state.sdk.onLifecycle(onSdkLifecycle);
+
+      state.activationCleanup = installActivationHandlers();
+      installResizeHandling();
+      updateResponsiveLayout();
+
+      state.sdk.ready
+        .then(() => state.sdk.setMessageFilters([FILTER_PATTERN]))
+        .then(() => {
+          state.connected = true;
+          state.lifecycleState = "WIDGET_CONNECTED";
+          notifyWidgetActivated("sdk_ready");
+          setBanner("Connected. Join the lobby to announce your shipyard.");
+          renderHud();
+        })
+        .catch((err) => {
+          state.connected = false;
+          console.error("[bship] SDK ready/filter failure", err);
+          setBanner("Connection issue. Messages cannot be exchanged yet.");
+          renderHud();
+        });
+    }
+
+    function onSdkConnectionState(event) {
+      state.connected = !!event.connected;
+      renderHud();
+    }
+
+    function onSdkLifecycle(event) {
+      const name = event && event.event ? String(event.event) : "";
+      if (!name) return;
+      state.lifecycleState = name;
+      if (name === "WIDGET_CONNECTED") {
+        notifyWidgetActivated("lifecycle_connected");
+      }
+      renderHud();
+    }
+
+    function onJoinClicked() {
+      const raw = refs.nameInput.value.trim();
+      if (!raw) {
+        refs.nameInput.focus();
+        return;
+      }
+      state.selfName = raw.slice(0, 24);
+      state.joined = true;
+      state.phase = "lobby";
+      state.status = "idle";
+      setBanner("Lobby joined. Discovering nearby captains.");
+      renderHud();
+      renderAll();
+
+      announcePresence();
+      requestWho();
+
+      if (state.pollId) clearInterval(state.pollId);
+      state.pollId = setInterval(() => {
+        prunePeers();
+        if (state.joined) announcePresence();
+      }, PRESENCE_INTERVAL_MS);
+    }
+
+    function requestWho() {
+      if (!state.joined) return;
+      sendVerb("who", {
+        fromGuid: state.selfGuid,
+        fromName: state.selfName,
+        requesterGuid: state.selfGuid,
+        ts: Date.now()
+      });
+    }
+
+    function announcePresence(toGuid = null) {
+      if (!state.joined) return;
+      sendVerb("iam", {
+        fromGuid: state.selfGuid,
+        fromName: state.selfName,
+        state: state.status,
+        phase: state.phase,
+        gameId: state.game.gameId,
+        toGuid,
+        ts: Date.now()
+      });
+    }
+
+    function sendVerb(verb, payload) {
+      if (!state.sdk || !state.joined) return;
+      const command = `${COMMAND_PREFIX}.${verb}`;
+      if (!command.startsWith(COMMAND_PREFIX)) return;
+      const line = `${command} ${JSON.stringify({ v: 1, ...payload })}`;
+      if (!line.startsWith(COMMAND_PREFIX)) return;
+
+      state.sdk.sendMessage(line, {
+        username: state.selfName || "unknown",
+        type: "text/plain",
+        timestamp: Math.floor(Date.now() / 1000)
+      }).catch((err) => {
+        console.error("[bship] send failed", verb, err);
+      });
+    }
+
+    function onSdkMessage(event) {
+      const raw = (event && event.message) ? String(event.message) : "";
+      if (!raw.startsWith(COMMAND_PREFIX)) return;
+
+      const parsed = parseCommand(raw);
+      if (!parsed) return;
+
+      const { verb, payload } = parsed;
+      if (!payload || typeof payload !== "object") return;
+
+      if (payload.fromGuid && payload.fromGuid === state.selfGuid) {
+        return;
+      }
+
+      switch (verb) {
+        case "who":
+          onWho(payload);
+          break;
+        case "iam":
+          onIam(payload);
+          break;
+        case "challenge":
+          onChallenge(payload);
+          break;
+        case "challenge.accept":
+          onChallengeAccept(payload);
+          break;
+        case "challenge.reject":
+          onChallengeReject(payload, "rejected");
+          break;
+        case "challenge.timeout":
+          onChallengeReject(payload, "timed out");
+          break;
+        case "ready":
+          onReady(payload);
+          break;
+        case "shot":
+          onShot(payload);
+          break;
+        case "shot.result":
+          onShotResult(payload);
+          break;
+        case "sunk":
+          onSunk(payload);
+          break;
+        case "lose":
+          onLose(payload);
+          break;
+        case "win":
+          onWin(payload);
+          break;
+        case "forfeit":
+          onForfeit(payload);
+          break;
+        case "lobby":
+          onLobbyReturn(payload);
+          break;
+        default:
+          break;
+      }
+    }
+
+    function parseCommand(raw) {
+      const match = raw.match(/^\/ww\.bship(?:\.([a-z0-9_.-]+))?\s*(.*)$/i);
+      if (!match || !match[1]) return null;
+      const verb = match[1].toLowerCase();
+      const tail = (match[2] || "").trim();
+      if (!tail) return { verb, payload: {} };
+      try {
+        const payload = JSON.parse(tail);
+        return { verb, payload };
+      } catch (_err) {
+        return null;
+      }
+    }
+
+    function onWho(payload) {
+      if (!state.joined) return;
+      if (payload.requesterGuid === state.selfGuid) return;
+      announcePresence(payload.requesterGuid || null);
+    }
+
+    function onIam(payload) {
+      if (!state.joined) return;
+      if (payload.toGuid && payload.toGuid !== state.selfGuid) return;
+      if (!payload.fromGuid || !payload.fromName) return;
+
+      state.peers.set(payload.fromGuid, {
+        guid: payload.fromGuid,
+        name: payload.fromName,
+        status: payload.state || "idle",
+        phase: payload.phase || "lobby",
+        gameId: payload.gameId || null,
+        lastSeen: Date.now()
+      });
+
+      renderRoster();
+    }
+
+    function prunePeers() {
+      const now = Date.now();
+      const removed = [];
+      for (const [guid, peer] of state.peers.entries()) {
+        if (now - peer.lastSeen > PEER_STALE_MS) {
+          removed.push(guid);
+        }
+      }
+      removed.forEach((guid) => state.peers.delete(guid));
+
+      if (state.selectedPeerGuid && !state.peers.has(state.selectedPeerGuid)) {
+        state.selectedPeerGuid = null;
+      }
+
+      renderRoster();
+    }
+
+    function issueChallenge() {
+      if (!state.joined || state.phase !== "lobby") return;
+      const peer = state.selectedPeerGuid ? state.peers.get(state.selectedPeerGuid) : null;
+      if (!peer || peer.status !== "idle") {
+        setBanner("Select an idle player before issuing a challenge.");
+        return;
+      }
+
+      const gameId = makeGameId();
+      state.status = "challenging";
+      state.challenge = {
+        direction: "out",
+        gameId,
+        peerGuid: peer.guid,
+        peerName: peer.name,
+        expiresAt: Date.now() + CHALLENGE_TIMEOUT_MS
+      };
+      state.game.gameId = gameId;
+      state.game.challengerGuid = state.selfGuid;
+      state.game.opponentGuid = peer.guid;
+      state.game.opponentName = peer.name;
+      setBanner(`Challenge sent to ${peer.name}. Waiting up to 10 seconds.`);
+      renderHud();
+      renderRoster();
+
+      sendVerb("challenge", {
+        fromGuid: state.selfGuid,
+        fromName: state.selfName,
+        toGuid: peer.guid,
+        toName: peer.name,
+        gameId,
+        timeoutMs: CHALLENGE_TIMEOUT_MS,
+        ts: Date.now()
+      });
+      announcePresence();
+
+      if (state.challengeTimerId) clearTimeout(state.challengeTimerId);
+      state.challengeTimerId = setTimeout(() => {
+        if (state.challenge && state.challenge.direction === "out" && state.status === "challenging") {
+          setBanner(`No response from ${peer.name}. Challenge timed out.`);
+          resetGameToLobby();
+        }
+      }, CHALLENGE_TIMEOUT_MS + 100);
+    }
+
+    function onChallenge(payload) {
+      if (!state.joined) return;
+      if (payload.toGuid && payload.toGuid !== state.selfGuid) return;
+
+      const fromGuid = payload.fromGuid;
+      const fromName = payload.fromName || "Unknown";
+      if (!fromGuid || !payload.gameId) return;
+
+      if (state.status !== "idle" || state.phase !== "lobby") {
+        sendVerb("challenge.reject", {
+          fromGuid: state.selfGuid,
+          fromName: state.selfName,
+          toGuid: fromGuid,
+          gameId: payload.gameId,
+          reason: "busy",
+          ts: Date.now()
+        });
+        return;
+      }
+
+      state.status = "challenged";
+      state.challenge = {
+        direction: "in",
+        gameId: payload.gameId,
+        peerGuid: fromGuid,
+        peerName: fromName,
+        expiresAt: Date.now() + CHALLENGE_TIMEOUT_MS
+      };
+      state.game.gameId = payload.gameId;
+      state.game.challengerGuid = fromGuid;
+      state.game.opponentGuid = fromGuid;
+      state.game.opponentName = fromName;
+
+      showChallengeModal(fromName, payload.gameId);
+      setBanner(`${fromName} challenged you. Respond within 10 seconds.`);
+      renderHud();
+      announcePresence();
+    }
+
+    function showChallengeModal(fromName, gameId) {
+      refs.modalMsg.textContent = `${fromName} invites you to Battleship.`;
+      refs.modalBg.classList.add("show");
+
+      if (state.challengeCountdownId) clearInterval(state.challengeCountdownId);
+      if (state.challengeTimerId) clearTimeout(state.challengeTimerId);
+
+      tickChallengeCountdown();
+      state.challengeCountdownId = setInterval(tickChallengeCountdown, 250);
+      state.challengeTimerId = setTimeout(() => {
+        if (!state.challenge || state.challenge.direction !== "in") return;
+        const current = state.challenge;
+        hideChallengeModal();
+        sendVerb("challenge.timeout", {
+          fromGuid: state.selfGuid,
+          fromName: state.selfName,
+          toGuid: current.peerGuid,
+          gameId: current.gameId,
+          ts: Date.now()
+        });
+        setBanner("Challenge timed out. Returning to idle lobby state.");
+        resetGameToLobby();
+      }, CHALLENGE_TIMEOUT_MS);
+    }
+
+    function tickChallengeCountdown() {
+      const left = state.challenge ? Math.max(0, state.challenge.expiresAt - Date.now()) : 0;
+      refs.modalCountdown.textContent = (left / 1000).toFixed(1);
+    }
+
+    function hideChallengeModal() {
+      refs.modalBg.classList.remove("show");
+      if (state.challengeCountdownId) {
+        clearInterval(state.challengeCountdownId);
+        state.challengeCountdownId = null;
+      }
+      if (state.challengeTimerId) {
+        clearTimeout(state.challengeTimerId);
+        state.challengeTimerId = null;
+      }
+    }
+
+    function acceptChallenge() {
+      if (!state.challenge || state.challenge.direction !== "in") return;
+      const current = state.challenge;
+      hideChallengeModal();
+
+      state.phase = "setup";
+      state.status = "setup";
+      state.game.gameId = current.gameId;
+      state.game.opponentGuid = current.peerGuid;
+      state.game.opponentName = current.peerName;
+      state.game.myReady = false;
+      state.game.opponentReady = false;
+      state.game.turnGuid = null;
+      prepareSetupForMatch();
+
+      sendVerb("challenge.accept", {
+        fromGuid: state.selfGuid,
+        fromName: state.selfName,
+        toGuid: current.peerGuid,
+        gameId: current.gameId,
+        ts: Date.now()
+      });
+
+      setBanner("Challenge accepted. Place your fleet.");
+      state.challenge = null;
+      announcePresence();
+      renderAll();
+    }
+
+    function rejectChallenge() {
+      if (!state.challenge || state.challenge.direction !== "in") return;
+      const current = state.challenge;
+      hideChallengeModal();
+      sendVerb("challenge.reject", {
+        fromGuid: state.selfGuid,
+        fromName: state.selfName,
+        toGuid: current.peerGuid,
+        gameId: current.gameId,
+        reason: "declined",
+        ts: Date.now()
+      });
+      setBanner(`Challenge from ${current.peerName} rejected.`);
+      resetGameToLobby();
+    }
+
+    function onChallengeAccept(payload) {
+      if (!state.challenge || state.challenge.direction !== "out") return;
+      if (payload.toGuid && payload.toGuid !== state.selfGuid) return;
+      if (payload.gameId !== state.challenge.gameId) return;
+      if (payload.fromGuid !== state.challenge.peerGuid) return;
+
+      if (state.challengeTimerId) {
+        clearTimeout(state.challengeTimerId);
+        state.challengeTimerId = null;
+      }
+
+      state.phase = "setup";
+      state.status = "setup";
+      state.game.gameId = payload.gameId;
+      state.game.opponentGuid = payload.fromGuid;
+      state.game.opponentName = payload.fromName || state.challenge.peerName;
+      state.game.challengerGuid = state.selfGuid;
+      state.game.myReady = false;
+      state.game.opponentReady = false;
+      state.game.turnGuid = null;
+      state.challenge = null;
+      prepareSetupForMatch();
+
+      setBanner(`${state.game.opponentName} accepted. Place ships and click Ready to Play.`);
+      announcePresence();
+      renderAll();
+    }
+
+    function onChallengeReject(payload, reason) {
+      if (!state.challenge || state.challenge.direction !== "out") return;
+      if (payload.toGuid && payload.toGuid !== state.selfGuid) return;
+      if (payload.gameId !== state.challenge.gameId) return;
+      if (payload.fromGuid !== state.challenge.peerGuid) return;
+
+      if (state.challengeTimerId) {
+        clearTimeout(state.challengeTimerId);
+        state.challengeTimerId = null;
+      }
+
+      setBanner(`${state.challenge.peerName} ${reason} the challenge.`);
+      resetGameToLobby();
+    }
+
+    function markReady() {
+      if (state.phase !== "setup") {
+        setBanner("You can only mark ready during setup.");
+        return;
+      }
+      if (!isFleetPlaced()) {
+        setBanner("Place all ships before clicking Ready to Play.");
+        return;
+      }
+
+      state.game.myReady = true;
+      state.status = "setup";
+      sendVerb("ready", {
+        fromGuid: state.selfGuid,
+        fromName: state.selfName,
+        toGuid: state.game.opponentGuid,
+        gameId: state.game.gameId,
+        ready: true,
+        ts: Date.now()
+      });
+      maybeStartBattle();
+      renderAll();
+    }
+
+    function onReady(payload) {
+      if (state.phase !== "setup") return;
+      if (!state.game.gameId || payload.gameId !== state.game.gameId) return;
+      if (payload.toGuid && payload.toGuid !== state.selfGuid) return;
+      if (payload.fromGuid !== state.game.opponentGuid) return;
+
+      state.game.opponentReady = !!payload.ready;
+      maybeStartBattle();
+      renderAll();
+    }
+
+    function maybeStartBattle() {
+      if (state.phase === "battle" || state.phase === "game_over") return;
+      if (!state.game.myReady || !state.game.opponentReady) {
+        const mine = state.game.myReady ? "ready" : "not ready";
+        const theirs = state.game.opponentReady ? "ready" : "not ready";
+        setBanner(`Setup status - You: ${mine}, Opponent: ${theirs}.`);
+        return;
+      }
+
+      state.phase = "battle";
+      state.status = "in_game";
+      state.game.finished = false;
+      state.game.winnerGuid = null;
+      state.game.loserGuid = null;
+      state.game.pendingShot = null;
+      state.game.turnGuid = state.game.challengerGuid;
+      const first = state.game.turnGuid === state.selfGuid ? "You fire first." : `${state.game.opponentName} fires first.`;
+      setBanner(`Battle started. ${first}`);
+      state.result.outcome = null;
+      state.result.message = "";
+      resetBattleMarks();
+      clearStickySunkMessage();
+      clearBoardActionStatus();
+      syncTurnTimer();
+      announcePresence();
+      renderAll();
+    }
+
+    function onTargetBoardClicked(ev) {
+      const cell = ev.target.closest(".cell");
+      if (!cell) return;
+      if (state.phase !== "battle") return;
+      if (state.game.finished) return;
+
+      const x = Number(cell.dataset.x);
+      const y = Number(cell.dataset.y);
+      if (Number.isNaN(x) || Number.isNaN(y)) return;
+
+      if (state.game.turnGuid !== state.selfGuid) {
+        setBanner("Wait for your turn.");
+        return;
+      }
+
+      if (state.targetMarks[y][x] !== null) {
+        setBanner("That target has already been marked.");
+        return;
+      }
+
+      clearStickySunkMessage();
+      clearBoardActionStatus();
+      state.targetMarks[y][x] = "pending";
+      state.game.pendingShot = { x, y };
+      state.game.turnGuid = null;
+      syncTurnTimer();
+      sendVerb("shot", {
+        fromGuid: state.selfGuid,
+        fromName: state.selfName,
+        toGuid: state.game.opponentGuid,
+        gameId: state.game.gameId,
+        x,
+        y,
+        ts: Date.now()
+      });
+      setBanner(`Shot fired at ${toCoordLabel(x, y)}. Awaiting result...`);
+      setBoardActionStatus("target", `Shot fired at ${toCoordLabel(x, y)}.`, false);
+      renderTargetBoard();
+      renderHud();
+    }
+
+    function onShot(payload) {
+      if (state.phase !== "battle" || state.game.finished) return;
+      if (!payload || payload.gameId !== state.game.gameId) return;
+      if (payload.toGuid && payload.toGuid !== state.selfGuid) return;
+      if (payload.fromGuid !== state.game.opponentGuid) return;
+
+      const x = Number(payload.x);
+      const y = Number(payload.y);
+      if (!isBoardCoord(x, y)) return;
+
+      const key = `${x},${y}`;
+      let resolution = state.resolvedIncomingShots[key] || null;
+      if (!resolution) {
+        resolution = resolveIncomingShot(x, y);
+        state.resolvedIncomingShots[key] = resolution;
+      }
+      const attackerName = payload.fromName || state.game.opponentName || "Opponent";
+
+      clearStickySunkMessage();
+      clearBoardActionStatus();
+      state.incomingMarks[y][x] = resolution.result;
+      renderOwnBoard();
+      renderMapKey();
+
+      sendVerb("shot.result", {
+        fromGuid: state.selfGuid,
+        fromName: state.selfName,
+        toGuid: payload.fromGuid,
+        gameId: state.game.gameId,
+        x,
+        y,
+        result: resolution.result,
+        shipId: resolution.shipId,
+        shipName: getShipNameById(resolution.shipId),
+        sunk: resolution.sunk,
+        remainingShips: countShipsAfloat(),
+        ts: Date.now()
+      });
+
+      if (resolution.sunk && resolution.shipId) {
+        const shipName = getShipNameById(resolution.shipId);
+        setStickySunkMessage(`${attackerName} sunk your ${shipName}!`, "own");
+        sendVerb("sunk", {
+          fromGuid: state.selfGuid,
+          fromName: state.selfName,
+          toGuid: payload.fromGuid,
+          gameId: state.game.gameId,
+          shipId: resolution.shipId,
+          shipName,
+          ts: Date.now()
+        });
+      }
+
+      const incomingWord = resolution.result === "hit" ? "Hit!" : "Miss.";
+      setBoardActionStatus("own", `${attackerName} fired at ${toCoordLabel(x, y)}: ${incomingWord}`, resolution.result === "hit");
+
+      if (countShipsAfloat() === 0) {
+        sendVerb("lose", {
+          fromGuid: state.selfGuid,
+          fromName: state.selfName,
+          toGuid: payload.fromGuid,
+          gameId: state.game.gameId,
+          ts: Date.now()
+        });
+        finishGame(false, `${state.game.opponentName} has sunk your fleet.`);
+        return;
+      }
+
+      state.game.turnGuid = state.selfGuid;
+      syncTurnTimer();
+      setBanner(`${state.game.opponentName} fired at ${toCoordLabel(x, y)}: ${resolution.result}. Your turn.`);
+      renderHud();
+      renderBoardStatuses();
+    }
+
+    function onShotResult(payload) {
+      if (state.phase !== "battle" || state.game.finished) return;
+      if (!payload || payload.gameId !== state.game.gameId) return;
+      if (payload.toGuid && payload.toGuid !== state.selfGuid) return;
+      if (payload.fromGuid !== state.game.opponentGuid) return;
+
+      const x = Number(payload.x);
+      const y = Number(payload.y);
+      if (!isBoardCoord(x, y)) return;
+
+      const result = payload.result === "hit" ? "hit" : "miss";
+      state.targetMarks[y][x] = result;
+      state.game.pendingShot = null;
+      state.game.turnGuid = state.game.opponentGuid;
+      syncTurnTimer();
+
+      if (payload.sunk) {
+        const shipName = payload.shipName || payload.shipId || "ship";
+        const targetName = payload.fromName || state.game.opponentName || "opponent";
+        setStickySunkMessage(`You sunk ${targetName}'s ${shipName}!`, "target");
+      }
+
+      const sunkText = payload.sunk ? " Ship sunk." : "";
+      setBanner(`Shot at ${toCoordLabel(x, y)}: ${result}.${sunkText} Waiting for opponent turn.`);
+      const hitWord = result === "hit" ? "Hit!" : "Miss.";
+      setBoardActionStatus("target", `${toCoordLabel(x, y)}: ${hitWord}`, result === "hit");
+      renderTargetBoard();
+      renderHud();
+      renderBoardStatuses();
+    }
+
+    function onSunk(payload) {
+      if (!payload || payload.gameId !== state.game.gameId) return;
+      if (payload.toGuid && payload.toGuid !== state.selfGuid) return;
+      if (payload.fromGuid !== state.game.opponentGuid) return;
+      const shipName = payload.shipName || payload.shipId || "a ship";
+      const targetName = payload.fromName || state.game.opponentName || "opponent";
+      setStickySunkMessage(`You sunk ${targetName}'s ${shipName}!`, "target");
+      setBanner(`Direct hit confirmed: you sank ${state.game.opponentName}'s ${shipName}.`);
+      renderBoardStatuses();
+    }
+
+    function onLose(payload) {
+      if (!payload || payload.gameId !== state.game.gameId) return;
+      if (payload.toGuid && payload.toGuid !== state.selfGuid) return;
+      if (payload.fromGuid !== state.game.opponentGuid) return;
+      sendVerb("win", {
+        fromGuid: state.selfGuid,
+        fromName: state.selfName,
+        toGuid: payload.fromGuid,
+        gameId: state.game.gameId,
+        ts: Date.now()
+      });
+      finishGame(true, `${state.game.opponentName} reports defeat. You win this battle.`);
+    }
+
+    function onWin(payload) {
+      if (!payload || payload.gameId !== state.game.gameId) return;
+      if (payload.toGuid && payload.toGuid !== state.selfGuid) return;
+      if (payload.fromGuid !== state.game.opponentGuid) return;
+      if (state.game.finished) return;
+      finishGame(false, `${state.game.opponentName} has won the battle.`);
+    }
+
+    function onForfeit(payload) {
+      if (!payload || payload.gameId !== state.game.gameId) return;
+      if (payload.toGuid && payload.toGuid !== state.selfGuid) return;
+      if (payload.fromGuid !== state.game.opponentGuid) return;
+      const quitter = payload.fromName || state.game.opponentName || "Opponent";
+      finishGame(true, `${quitter} left the game. You win by forfeit.`);
+    }
+
+    function onLobbyReturn(payload) {
+      if (!payload || payload.fromGuid === state.selfGuid) return;
+      const peer = state.peers.get(payload.fromGuid);
+      if (peer) {
+        peer.status = "idle";
+        peer.phase = "lobby";
+        peer.gameId = null;
+        peer.lastSeen = Date.now();
+      }
+      renderRoster();
+    }
+
+    function returnToLobby() {
+      if (!state.joined) return;
+      if (isActiveMatchPhase()) {
+        sendVerb("forfeit", {
+          fromGuid: state.selfGuid,
+          fromName: state.selfName,
+          toGuid: state.game.opponentGuid,
+          gameId: state.game.gameId,
+          reason: "left_lobby",
+          ts: Date.now()
+        });
+      }
+      sendVerb("lobby", {
+        fromGuid: state.selfGuid,
+        fromName: state.selfName,
+        ts: Date.now()
+      });
+      resetGameToLobby();
+      setBanner("Returned to lobby. You are now idle.");
+    }
+
+    function resetGameToLobby() {
+      hideChallengeModal();
+      hideGameOverModal();
+      state.phase = "lobby";
+      state.status = "idle";
+      state.challenge = null;
+      state.game = {
+        gameId: null,
+        challengerGuid: null,
+        opponentGuid: null,
+        opponentName: null,
+        myReady: false,
+        opponentReady: false,
+        turnGuid: null,
+        pendingShot: null,
+        finished: false,
+        winnerGuid: null,
+        loserGuid: null
+      };
+      state.targetMarks = createMarkBoard();
+      state.incomingMarks = createMarkBoard();
+      state.resolvedIncomingShots = {};
+      clearBoardActionStatus();
+      clearStickySunkMessage();
+      stopTurnTimer();
+      state.stickySunkMessage = null;
+      state.result = { outcome: null, message: "" };
+      clearPlacement();
+      announcePresence();
+      renderAll();
+    }
+
+    function toggleOrientation() {
+      state.placement.orientation = state.placement.orientation === "h" ? "v" : "h";
+      refs.rotateBtn.textContent = state.placement.orientation === "h" ? "Rotate: Horizontal" : "Rotate: Vertical";
+      renderOwnBoard();
+    }
+
+    function clearPlacement() {
+      if (state.phase !== "setup" && state.phase !== "lobby") {
+        setBanner("Fleet changes are available in setup phase.");
+        return;
+      }
+      if (state.game.myReady && state.phase === "setup") {
+        setBanner("You are already ready. Return to lobby to reset this match.");
+        return;
+      }
+      state.placement.ships = cloneShips();
+      state.placement.board = createBoard();
+      state.placement.selectedShipId = "carrier";
+      state.game.myReady = false;
+      renderOwnBoard();
+      renderFleet();
+      renderReadyButton();
+    }
+
+    function randomizePlacement() {
+      if (state.phase !== "setup") {
+        setBanner("Random placement is available during setup only.");
+        return;
+      }
+      if (state.game.myReady) {
+        setBanner("You are already ready. Return to lobby to start a new setup.");
+        return;
+      }
+      let attempts = 0;
+      const nextShips = cloneShips();
+      const nextBoard = createBoard();
+
+      while (attempts < 400) {
+        attempts += 1;
+        resetShips(nextShips);
+        clearBoardArray(nextBoard);
+
+        let ok = true;
+        for (const ship of nextShips) {
+          let placed = false;
+          for (let t = 0; t < 120 && !placed; t += 1) {
+            const orientation = Math.random() > 0.5 ? "h" : "v";
+            const x = Math.floor(Math.random() * BOARD_SIZE);
+            const y = Math.floor(Math.random() * BOARD_SIZE);
+            if (canPlaceShip(nextBoard, ship.size, x, y, orientation)) {
+              placeShip(nextBoard, ship, x, y, orientation);
+              placed = true;
+            }
+          }
+          if (!placed) {
+            ok = false;
+            break;
+          }
+        }
+
+        if (ok) {
+          state.placement.board = copyBoard(nextBoard);
+          state.placement.ships = copyShips(nextShips);
+          state.game.myReady = false;
+          setBanner("Random fleet generated. Click Randomize again if you want a different layout.");
+          renderOwnBoard();
+          renderFleet();
+          renderReadyButton();
+          return;
+        }
+      }
+
+      setBanner("Random placement failed unexpectedly. Try again.");
+    }
+
+    function onOwnBoardClick(ev) {
+      if (state.phase !== "setup") {
+        setBanner("Ship placement is available during setup only.");
+        return;
+      }
+      if (state.game.myReady) {
+        setBanner("Ready confirmed. Ship placement is now locked.");
+        return;
+      }
+
+      const cell = ev.target.closest(".cell");
+      if (!cell) return;
+      const x = Number(cell.dataset.x);
+      const y = Number(cell.dataset.y);
+      if (Number.isNaN(x) || Number.isNaN(y)) return;
+
+      const selected = state.placement.ships.find((s) => s.id === state.placement.selectedShipId);
+      if (!selected) {
+        setBanner("Select a ship from the fleet list first.");
+        return;
+      }
+
+      if (selected.placed) {
+        unplaceShip(state.placement.board, selected);
+      }
+
+      if (!canPlaceShip(state.placement.board, selected.size, x, y, state.placement.orientation)) {
+        setBanner("Invalid placement: out of bounds or overlapping another ship.");
+        renderOwnBoard();
+        return;
+      }
+
+      placeShip(state.placement.board, selected, x, y, state.placement.orientation);
+      state.game.myReady = false;
+      setBanner(`${selected.name} placed.`);
+
+      const next = state.placement.ships.find((s) => !s.placed);
+      if (next) state.placement.selectedShipId = next.id;
+
+      renderOwnBoard();
+      renderFleet();
+      renderReadyButton();
+    }
+
+    function renderAll() {
+      renderHud();
+      renderRoster();
+      renderSidePanelMode();
+      renderOwnBoard();
+      renderTargetBoard();
+      renderFleet();
+      renderMapKey();
+      renderReadyButton();
+      renderBoardStatuses();
+      renderResultPanel();
+      renderNotes();
+    }
+
+    function renderHud() {
+      refs.phaseText.textContent = `${state.phase} / ${state.status}`;
+      refs.selfText.textContent = state.joined ? state.selfName : "not joined";
+      let gameInfo = state.phase === "lobby" ? "match: none" : "match: active";
+      if (state.phase === "battle") {
+        const turn = state.game.turnGuid === state.selfGuid ? "your turn" : `${state.game.opponentName || "opponent"} turn`;
+        gameInfo = `turn: ${turn}`;
+      }
+      if (state.phase === "game_over") {
+        gameInfo = "match: complete";
+      }
+      refs.gameText.textContent = gameInfo;
+      refs.connText.textContent = state.connected
+        ? `connected (${state.lifecycleState.toLowerCase()})`
+        : "disconnected";
+      refs.dotConn.className = `dot ${state.connected ? "dot-ok" : "dot-bad"}`;
+    }
+
+    function renderRoster() {
+      const peers = Array.from(state.peers.values()).sort((a, b) => a.name.localeCompare(b.name));
+      refs.rosterBody.innerHTML = "";
+
+      if (!peers.length) {
+        const tr = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = 2;
+        td.textContent = "No players discovered yet.";
+        td.className = "small";
+        tr.appendChild(td);
+        refs.rosterBody.appendChild(tr);
+      }
+
+      peers.forEach((peer) => {
+        const tr = document.createElement("tr");
+        tr.dataset.selected = String(state.selectedPeerGuid === peer.guid);
+        tr.addEventListener("click", () => {
+          state.selectedPeerGuid = peer.guid;
+          renderRoster();
+        });
+
+        const nameTd = document.createElement("td");
+        nameTd.innerHTML = `<strong>${escapeHtml(peer.name)}</strong>`;
+
+        const statusTd = document.createElement("td");
+        const badge = document.createElement("span");
+        badge.className = "status-badge";
+        badge.textContent = peer.status || "idle";
+        statusTd.appendChild(badge);
+
+        tr.appendChild(nameTd);
+        tr.appendChild(statusTd);
+        refs.rosterBody.appendChild(tr);
+      });
+
+      const selected = state.selectedPeerGuid ? state.peers.get(state.selectedPeerGuid) : null;
+      const canChallenge = !!(state.joined && state.phase === "lobby" && selected && selected.status === "idle");
+      refs.challengeBtn.disabled = !canChallenge;
+      refs.selectionNote.textContent = "";
+    }
+
+    function renderOwnBoard() {
+      refs.ownBoard.innerHTML = "";
+      refs.ownBoard.removeEventListener("click", onOwnBoardClick);
+      refs.ownBoard.addEventListener("click", onOwnBoardClick);
+
+      const preview = getPlacementPreview();
+
+      for (let y = 0; y < BOARD_SIZE; y += 1) {
+        for (let x = 0; x < BOARD_SIZE; x += 1) {
+          const cell = document.createElement("button");
+          cell.type = "button";
+          cell.className = "cell";
+          cell.dataset.x = String(x);
+          cell.dataset.y = String(y);
+
+          const shipId = state.placement.board[y][x];
+          if (shipId) {
+            cell.classList.add("ship", `ship-${shipId}`);
+          }
+
+          const incoming = state.incomingMarks[y][x];
+          if (incoming === "hit") {
+            cell.classList.add("hit");
+          } else if (incoming === "miss") {
+            cell.classList.add("miss");
+          }
+
+          if (shipId && isShipSunk(shipId)) {
+            cell.classList.add("ship-sunk");
+          }
+
+          if (preview && preview.cells.some((c) => c.x === x && c.y === y)) {
+            cell.classList.add(preview.valid ? "preview-ok" : "preview-bad");
+          }
+
+          refs.ownBoard.appendChild(cell);
+        }
+      }
+    }
+
+    function renderTargetBoard() {
+      refs.targetBoard.innerHTML = "";
+      for (let y = 0; y < BOARD_SIZE; y += 1) {
+        for (let x = 0; x < BOARD_SIZE; x += 1) {
+          const cell = document.createElement("button");
+          cell.type = "button";
+          cell.className = "cell";
+          cell.dataset.x = String(x);
+          cell.dataset.y = String(y);
+
+          const mark = state.targetMarks[y][x];
+          if (mark === "hit") cell.classList.add("hit");
+          if (mark === "miss") cell.classList.add("miss");
+          if (mark === "pending") cell.classList.add("pending");
+
+          if (state.phase !== "battle") {
+            cell.classList.add("target-disabled");
+          }
+
+          refs.targetBoard.appendChild(cell);
+        }
+      }
+    }
+
+    function renderFleet() {
+      refs.fleetList.innerHTML = "";
+      for (const ship of state.placement.ships) {
+        const row = document.createElement("button");
+        row.type = "button";
+        row.className = "ship-row";
+        row.dataset.selected = String(state.placement.selectedShipId === ship.id);
+        row.dataset.placed = String(ship.placed);
+        row.addEventListener("click", () => {
+          state.placement.selectedShipId = ship.id;
+          renderFleet();
+        });
+
+        const left = document.createElement("span");
+        left.textContent = `${ship.name} (${ship.size})`;
+
+        const right = document.createElement("span");
+        right.className = "ship-mini";
+        for (let i = 0; i < ship.size; i += 1) {
+          const m = document.createElement("span");
+          m.className = "mini-cell";
+          const tint = getShipTintColor(ship.id);
+          m.style.background = tint.bg;
+          m.style.borderColor = tint.border;
+          right.appendChild(m);
+        }
+
+        const tag = document.createElement("span");
+        tag.className = "small";
+        tag.textContent = ship.placed ? "placed" : "not placed";
+
+        const holder = document.createElement("span");
+        holder.className = "row";
+        holder.style.justifyContent = "flex-end";
+        holder.style.flex = "0 0 auto";
+        holder.appendChild(tag);
+        holder.appendChild(right);
+
+        row.appendChild(left);
+        row.appendChild(holder);
+        refs.fleetList.appendChild(row);
+      }
+    }
+
+    function renderReadyButton() {
+      const canReady = state.phase === "setup" && isFleetPlaced() && !state.game.myReady;
+      refs.readyBtn.disabled = !canReady;
+      if (state.phase === "battle") {
+        refs.readyBtn.textContent = "Battle In Progress";
+      } else if (state.phase === "game_over") {
+        refs.readyBtn.textContent = "Match Complete";
+      } else {
+        refs.readyBtn.textContent = state.game.myReady ? "Waiting for Opponent" : "Ready to Play";
+      }
+    }
+
+    function renderResultPanel() {
+      refs.resultPanel.className = "result-panel";
+      refs.resultPanel.textContent = "";
+      if (!state.result || !state.result.outcome || !state.result.message) return;
+      refs.resultPanel.classList.add(state.result.outcome === "win" ? "win" : "lose");
+      refs.resultPanel.textContent = state.result.message;
+    }
+
+    function renderBoardStatuses() {
+      const own = refs.ownStatus;
+      const target = refs.targetStatus;
+      if (!own || !target) return;
+
+      own.classList.remove("alert");
+      target.classList.remove("alert");
+
+      if (!isStartedGamePhase()) {
+        own.textContent = "";
+        target.textContent = "";
+      } else if (state.phase === "setup") {
+        own.textContent = state.game.myReady
+          ? "Fleet locked. Waiting for opponent readiness."
+          : "Place ships on your waters, then click Ready to Play.";
+        target.textContent = "Targeting is disabled until both players are ready.";
+      } else if (state.phase === "battle") {
+        own.textContent = "Incoming shots land here. Protect unsunk ships.";
+        target.textContent = state.game.turnGuid === state.selfGuid
+          ? "Your turn: click a fresh target cell to fire."
+          : "Opponent turn: waiting for incoming shot result.";
+      } else if (state.phase === "game_over") {
+        own.textContent = "Match complete. Return to lobby when ready.";
+        target.textContent = "Match complete. Return to lobby for a new challenge.";
+      } else {
+        own.textContent = "Place ships manually, or randomize until satisfied.";
+        target.textContent = "Select targets here once battle begins.";
+      }
+
+      if (state.boardActionStatus.own) {
+        own.textContent = state.boardActionStatus.own;
+        if (state.boardActionAlert.own) own.classList.add("alert");
+      }
+      if (state.boardActionStatus.target) {
+        target.textContent = state.boardActionStatus.target;
+        if (state.boardActionAlert.target) target.classList.add("alert");
+      }
+
+      // Sunk alerts have highest priority and persist until the next shot action clears them.
+      if (state.stickySunkMessage) {
+        if (state.stickySunkMessage.scope === "own") {
+          own.textContent = state.stickySunkMessage.text;
+          own.classList.add("alert");
+        } else {
+          target.textContent = state.stickySunkMessage.text;
+          target.classList.add("alert");
+        }
+      }
+    }
+
+    function renderNotes() {
+      refs.lobbyNote.textContent = "Select another player and invite them to play a game.";
+    }
+
+    function setBanner(message) {
+      refs.banner.textContent = message;
+    }
+
+    function setStickySunkMessage(text, scope) {
+      state.stickySunkMessage = {
+        text: String(text || ""),
+        scope: scope === "own" ? "own" : "target"
+      };
+      renderBoardStatuses();
+    }
+
+    function clearStickySunkMessage() {
+      if (!state.stickySunkMessage) return;
+      state.stickySunkMessage = null;
+      renderBoardStatuses();
+    }
+
+    function setBoardActionStatus(scope, text, isAlert) {
+      if (scope !== "own" && scope !== "target") return;
+      state.boardActionStatus[scope] = String(text || "");
+      state.boardActionAlert[scope] = !!isAlert;
+      renderBoardStatuses();
+    }
+
+    function clearBoardActionStatus() {
+      state.boardActionStatus.own = "";
+      state.boardActionStatus.target = "";
+      state.boardActionAlert.own = false;
+      state.boardActionAlert.target = false;
+      renderBoardStatuses();
+    }
+
+    function isStartedGamePhase() {
+      return state.phase === "setup" || state.phase === "battle" || state.phase === "game_over";
+    }
+
+    function isActiveMatchPhase() {
+      return state.phase === "setup" || state.phase === "battle";
+    }
+
+    function renderSidePanelMode() {
+      if (!refs.setupPanel || !refs.mapkeyPanel) return;
+      if (state.phase === "setup") {
+        refs.setupPanel.style.display = "block";
+        refs.mapkeyPanel.style.display = "none";
+      } else if (state.phase === "battle" || state.phase === "game_over") {
+        refs.setupPanel.style.display = "none";
+        refs.mapkeyPanel.style.display = "block";
+      } else {
+        refs.setupPanel.style.display = "none";
+        refs.mapkeyPanel.style.display = "none";
+      }
+    }
+
+    function renderMapKey() {
+      if (!refs.mapkeyList) return;
+      refs.mapkeyList.innerHTML = "";
+      SHIP_BLUEPRINTS.forEach((def) => {
+        const row = document.createElement("div");
+        row.className = "ship-row";
+        row.style.cursor = "default";
+
+        const left = document.createElement("span");
+        left.textContent = `${def.name} (${def.size})`;
+
+        const ship = state.placement.ships.find((s) => s.id === def.id) || null;
+        const hitCount = ship
+          ? ship.cells.filter((c) => state.incomingMarks[c.y] && state.incomingMarks[c.y][c.x] === "hit").length
+          : 0;
+        const sunk = !!(ship && ship.sunk);
+
+        const meta = document.createElement("span");
+        meta.className = `ship-hit-meta${sunk ? " sunk" : ""}`;
+        meta.textContent = sunk ? `SUNK ${hitCount}/${def.size}` : `Hits ${hitCount}/${def.size}`;
+
+        const right = document.createElement("span");
+        right.className = "ship-mini";
+        const tint = getShipTintColor(def.id);
+        for (let i = 0; i < def.size; i += 1) {
+          const m = document.createElement("span");
+          m.className = "mini-cell";
+          m.style.background = tint.bg;
+          m.style.borderColor = tint.border;
+          if (i < hitCount) {
+            m.classList.add("hit");
+          }
+          right.appendChild(m);
+        }
+        row.appendChild(left);
+        row.appendChild(meta);
+        row.appendChild(right);
+        refs.mapkeyList.appendChild(row);
+      });
+    }
+
+    function syncTurnTimer() {
+      if (state.phase !== "battle" || state.game.finished) {
+        stopTurnTimer();
+        return;
+      }
+      if (state.game.turnGuid !== state.selfGuid) {
+        stopTurnTimer();
+        return;
+      }
+
+      if (!state.turnDeadlineTs) {
+        state.turnDeadlineTs = Date.now() + SHOT_TIMEOUT_MS;
+      }
+
+      if (!state.turnTimerId) {
+        state.turnTimerId = setInterval(() => {
+          const left = Math.max(0, state.turnDeadlineTs - Date.now());
+          if (left === 0) {
+            handleShotTimeoutForfeit();
+            return;
+          }
+          const secs = Math.ceil(left / 1000);
+          setBoardActionStatus("target", `Your turn. Shot timer: ${secs}s`, secs <= 10);
+        }, 250);
+      }
+    }
+
+    function stopTurnTimer() {
+      if (state.turnTimerId) {
+        clearInterval(state.turnTimerId);
+        state.turnTimerId = null;
+      }
+      state.turnDeadlineTs = 0;
+    }
+
+    function handleShotTimeoutForfeit() {
+      stopTurnTimer();
+      if (!isActiveMatchPhase()) return;
+      sendVerb("forfeit", {
+        fromGuid: state.selfGuid,
+        fromName: state.selfName,
+        toGuid: state.game.opponentGuid,
+        gameId: state.game.gameId,
+        reason: "shot_timeout",
+        ts: Date.now()
+      });
+      setBanner("Shot timer expired. You forfeited and were returned to lobby.");
+      resetGameToLobby();
+    }
+
+    function showGameOverModal(message) {
+      if (!refs.gameoverModalBg || !refs.gameoverMsg) return;
+      refs.gameoverMsg.textContent = message;
+      refs.gameoverModalBg.classList.add("show");
+    }
+
+    function hideGameOverModal() {
+      if (!refs.gameoverModalBg) return;
+      refs.gameoverModalBg.classList.remove("show");
+    }
+
+    function acknowledgeGameOver() {
+      hideGameOverModal();
+      sendVerb("lobby", {
+        fromGuid: state.selfGuid,
+        fromName: state.selfName,
+        ts: Date.now()
+      });
+      resetGameToLobby();
+      setBanner("Game acknowledged. Returned to lobby.");
+    }
+
+    function prepareSetupForMatch() {
+      state.result = { outcome: null, message: "" };
+      state.game.finished = false;
+      state.game.pendingShot = null;
+      stopTurnTimer();
+      state.stickySunkMessage = null;
+      clearBoardActionStatus();
+      resetBattleMarks();
+      state.placement.ships = cloneShips();
+      state.placement.board = createBoard();
+      state.placement.selectedShipId = "carrier";
+      state.placement.orientation = "h";
+      refs.rotateBtn.textContent = "Rotate: Horizontal";
+    }
+
+    function resetBattleMarks() {
+      state.targetMarks = createMarkBoard();
+      state.incomingMarks = createMarkBoard();
+      state.resolvedIncomingShots = {};
+      state.placement.ships.forEach((ship) => {
+        ship.sunk = false;
+      });
+      renderMapKey();
+    }
+
+    function resolveIncomingShot(x, y) {
+      const shipId = state.placement.board[y][x];
+      if (!shipId) {
+        return { result: "miss", shipId: null, sunk: false };
+      }
+
+      const ship = state.placement.ships.find((s) => s.id === shipId);
+      if (!ship) {
+        return { result: "hit", shipId, sunk: false };
+      }
+
+      const sunk = ship.cells.every((cell) => {
+        if (cell.x === x && cell.y === y) return true;
+        return state.incomingMarks[cell.y][cell.x] === "hit";
+      });
+
+      if (sunk) {
+        ship.sunk = true;
+      }
+
+      return { result: "hit", shipId, sunk };
+    }
+
+    function countShipsAfloat() {
+      return state.placement.ships.filter((ship) => !ship.sunk).length;
+    }
+
+    function isShipSunk(shipId) {
+      const ship = state.placement.ships.find((s) => s.id === shipId);
+      return !!(ship && ship.sunk);
+    }
+
+    function isBoardCoord(x, y) {
+      return Number.isInteger(x) && Number.isInteger(y) && x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE;
+    }
+
+    function toCoordLabel(x, y) {
+      return `${String.fromCharCode(65 + x)}${y + 1}`;
+    }
+
+    function getShipNameById(shipId) {
+      if (!shipId) return "ship";
+      const ship = state.placement.ships.find((s) => s.id === shipId);
+      return ship ? ship.name : shipId;
+    }
+
+    function finishGame(didWin, message) {
+      state.phase = "game_over";
+      state.status = "game_over";
+      state.game.finished = true;
+      state.game.turnGuid = null;
+      state.game.pendingShot = null;
+      stopTurnTimer();
+      state.game.winnerGuid = didWin ? state.selfGuid : state.game.opponentGuid;
+      state.game.loserGuid = didWin ? state.game.opponentGuid : state.selfGuid;
+      state.result = {
+        outcome: didWin ? "win" : "lose",
+        message: didWin ? "Victory - Fleet Dominance Confirmed" : "Defeat - Fleet Lost"
+      };
+      setBanner(message);
+      showGameOverModal(message);
+      announcePresence();
+      renderAll();
+    }
+
+    function getPlacementPreview() {
+      if (state.phase !== "setup") return null;
+      return null;
+    }
+
+    function isFleetPlaced() {
+      return state.placement.ships.every((s) => s.placed);
+    }
+
+    function createBoard() {
+      return Array.from({ length: BOARD_SIZE }, () => Array.from({ length: BOARD_SIZE }, () => null));
+    }
+
+    function createMarkBoard() {
+      return Array.from({ length: BOARD_SIZE }, () => Array.from({ length: BOARD_SIZE }, () => null));
+    }
+
+    function cloneShips() {
+      return SHIP_BLUEPRINTS.map((s) => ({
+        id: s.id,
+        name: s.name,
+        size: s.size,
+        placed: false,
+        orientation: "h",
+        cells: [],
+        sunk: false
+      }));
+    }
+
+    function copyShips(ships) {
+      return ships.map((s) => ({
+        id: s.id,
+        name: s.name,
+        size: s.size,
+        placed: s.placed,
+        orientation: s.orientation,
+        cells: s.cells.map((c) => ({ x: c.x, y: c.y })),
+        sunk: !!s.sunk
+      }));
+    }
+
+    function resetShips(ships) {
+      ships.forEach((s) => {
+        s.placed = false;
+        s.orientation = "h";
+        s.cells = [];
+        s.sunk = false;
+      });
+    }
+
+    function clearBoardArray(board) {
+      for (let y = 0; y < BOARD_SIZE; y += 1) {
+        for (let x = 0; x < BOARD_SIZE; x += 1) {
+          board[y][x] = null;
+        }
+      }
+    }
+
+    function copyBoard(board) {
+      return board.map((row) => row.slice());
+    }
+
+    function canPlaceShip(board, size, startX, startY, orientation) {
+      const cells = collectCells(size, startX, startY, orientation);
+      if (!cells) return false;
+      return cells.every((c) => board[c.y][c.x] === null);
+    }
+
+    function collectCells(size, startX, startY, orientation) {
+      const cells = [];
+      for (let i = 0; i < size; i += 1) {
+        const x = orientation === "h" ? startX + i : startX;
+        const y = orientation === "v" ? startY + i : startY;
+        if (x < 0 || x >= BOARD_SIZE || y < 0 || y >= BOARD_SIZE) return null;
+        cells.push({ x, y });
+      }
+      return cells;
+    }
+
+    function placeShip(board, ship, startX, startY, orientation) {
+      const cells = collectCells(ship.size, startX, startY, orientation);
+      if (!cells) return false;
+      cells.forEach((c) => {
+        board[c.y][c.x] = ship.id;
+      });
+      ship.cells = cells;
+      ship.placed = true;
+      ship.orientation = orientation;
+      return true;
+    }
+
+    function unplaceShip(board, ship) {
+      ship.cells.forEach((c) => {
+        board[c.y][c.x] = null;
+      });
+      ship.cells = [];
+      ship.placed = false;
+    }
+
+    function makeGameId() {
+      const seed = Math.random().toString(16).slice(2, 8);
+      return `g${Date.now().toString(36)}${seed}`.slice(0, 14);
+    }
+
+    function shortGuid(guid) {
+      if (!guid) return "n/a";
+      return `${guid.slice(0, 8)}...`;
+    }
+
+    function escapeHtml(text) {
+      return String(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function getShipTintColor(shipId) {
+      switch (shipId) {
+        case "carrier":
+          return { bg: "#d7eefb", border: "#8cb3cb" };
+        case "battleship":
+          return { bg: "#d7f6f1", border: "#8fbab1" };
+        case "cruiser":
+          return { bg: "#e6f6d6", border: "#a8bd8d" };
+        case "submarine":
+          return { bg: "#fef1d3", border: "#ccb07a" };
+        case "destroyer":
+          return { bg: "#fde0d7", border: "#c79a8f" };
+        default:
+          return { bg: "#dfe6eb", border: "#728694" };
+      }
+    }
+
+    function kilroyGuid() {
+      return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+        const r = (Math.random() * 16) | 0;
+        const v = c === "x" ? r : ((r & 0x3) | 0x8);
+        return v.toString(16);
+      });
+    }
+
+    function readStartupArgs() {
+      const params = new URLSearchParams(window.location.search);
+      const alias = (
+        params.get("alias") ||
+        params.get("webwidget_alias") ||
+        params.get("pdalias") ||
+        ""
+      ).trim();
+      const guid = (
+        params.get("guid") ||
+        params.get("webwidget_guid") ||
+        ""
+      ).trim();
+      const targetOrigin = (
+        params.get("targetOrigin") ||
+        params.get("target_origin") ||
+        window.location.origin ||
+        "*"
+      ).trim();
+      return { alias, guid, targetOrigin };
+    }
+
+    function installActivationHandlers() {
+      const onPointerDown = () => notifyWidgetActivated("pointerdown");
+      const onFocusIn = () => notifyWidgetActivated("focusin");
+      const onWindowFocus = () => notifyWidgetActivated("window_focus");
+      const onVisibility = () => {
+        if (document.visibilityState === "visible") {
+          notifyWidgetActivated("visible");
+        }
+      };
+
+      document.addEventListener("pointerdown", onPointerDown, true);
+      document.addEventListener("focusin", onFocusIn, true);
+      window.addEventListener("focus", onWindowFocus, true);
+      document.addEventListener("visibilitychange", onVisibility, true);
+
+      return () => {
+        document.removeEventListener("pointerdown", onPointerDown, true);
+        document.removeEventListener("focusin", onFocusIn, true);
+        window.removeEventListener("focus", onWindowFocus, true);
+        document.removeEventListener("visibilitychange", onVisibility, true);
+      };
+    }
+
+    function notifyWidgetActivated(reason) {
+      if (window.parent === window) return;
+      if (!state.alias) return;
+      const now = Date.now();
+      if (now - state.lastActivationTs < 120) return;
+      state.lastActivationTs = now;
+      try {
+        window.parent.postMessage(
+          {
+            _cmd: "focus_widget_window",
+            pdalias: state.alias,
+            reason,
+            ts: now
+          },
+          state.targetOrigin || "*"
+        );
+      } catch (_err) {
+        // ignore activation bridge errors
+      }
+    }
+
+    function installResizeHandling() {
+      const onResize = () => updateResponsiveLayout();
+      window.addEventListener("resize", onResize, true);
+
+      if (typeof ResizeObserver === "function") {
+        state.resizeObserver = new ResizeObserver(() => {
+          updateResponsiveLayout();
+        });
+        state.resizeObserver.observe(document.documentElement);
+        const appRoot = document.querySelector(".app");
+        if (appRoot) state.resizeObserver.observe(appRoot);
+      }
+
+      const priorCleanup = state.activationCleanup;
+      state.activationCleanup = () => {
+        window.removeEventListener("resize", onResize, true);
+        if (state.resizeObserver) {
+          state.resizeObserver.disconnect();
+          state.resizeObserver = null;
+        }
+        if (typeof priorCleanup === "function") {
+          priorCleanup();
+        }
+      };
+    }
+
+    function updateResponsiveLayout() {
+      const vh = Math.max(420, window.innerHeight || 0);
+      const layoutHeight = Math.max(420, vh - 140);
+      const layout = document.querySelector(".layout");
+      if (layout) {
+        layout.style.minHeight = `${layoutHeight}px`;
+      }
+    }
+  </script>
+</body>
+</html>

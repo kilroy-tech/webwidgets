@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kilroy Tank Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            background: #1a1a1a;
+            color: #fff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 900px;
+            width: 100%;
+        }
+        
+        #lobbyScreen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            padding: 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 8px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        
+        #lobbyScreen h1 {
+            font-size: 3em;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+        
+        #lobbyScreen p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        
+        .lobby-form {
+            display: flex;
+            gap: 10px;
+            width: 100%;
+            max-width: 400px;
+        }
+        
+        #usernameInput {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 4px;
+            font-size: 1em;
+            background: rgba(255, 255, 255, 0.9);
+            color: #333;
+        }
+        
+        #usernameInput::placeholder {
+            color: #999;
+        }
+        
+        #joinBtn {
+            padding: 12px 30px;
+            background: #ff6b6b;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        #joinBtn:hover {
+            background: #ff5252;
+        }
+        
+        #joinBtn:active {
+            transform: scale(0.98);
+        }
+        
+        #gameScreen {
+            display: none;
+            flex-direction: column;
+            gap: 10px;
+            padding: 20px;
+            background: #0a0a0a;
+            border-radius: 8px;
+        }
+        
+        #gameInfo {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+        
+        #canvasContainer {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            margin: 0 auto;
+            border: 2px solid #667eea;
+            border-radius: 4px;
+            background: #000;
+            aspect-ratio: 4 / 3;
+        }
+        
+        #gameCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            border-radius: 2px;
+        }
+        
+        .controls {
+            text-align: center;
+            font-size: 0.85em;
+            opacity: 0.7;
+            margin-top: 10px;
+        }
+        
+        #leaveBtn {
+            align-self: center;
+            padding: 8px 20px;
+            background: #ff6b6b;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        #leaveBtn:hover {
+            background: #ff5252;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Lobby Screen -->
+        <div id="lobbyScreen">
+            <h1>⚔️ TANK BATTLE</h1>
+            <p>Enter your name to join the battlefield</p>
+            <div class="lobby-form">
+                <input 
+                    type="text" 
+                    id="usernameInput" 
+                    placeholder="Enter your name"
+                    maxlength="20"
+                >
+                <button id="joinBtn">JOIN</button>
+            </div>
+        </div>
+        
+        <!-- Game Screen -->
+        <div id="gameScreen">
+            <div id="gameInfo">
+                <span>Player: <strong id="playerName"></strong></span>
+                <span>Tanks on field: <strong id="tankCount">1</strong></span>
+            </div>
+            <div id="canvasContainer">
+                <canvas id="gameCanvas"></canvas>
+            </div>
+            <div class="controls">
+                <strong>Controls:</strong> WASD to move, rotate | SPACE to shoot (coming soon) | ESC to leave
+            </div>
+            <button id="leaveBtn">LEAVE GAME</button>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initWebWidget } from "/apps/kilroy.groups/js/webwidget_sdk.js";
+
+        const sparams = new Proxy(new URLSearchParams(window.location.search), {
+            get: (searchParams, prop) => searchParams.get(prop),
+        });
+        const alias = (sparams.alias || "").trim();
+        const guid = (sparams.guid || "").trim();
+
+        window._pendingRemoteMessages = window._pendingRemoteMessages || [];
+
+        const sdk = initWebWidget({ alias, guid });
+        window.webwidgetSDK = sdk;
+        window.webwidgetSDKReady = sdk.ready;
+
+        sdk.onMessage((event) => {
+            if (!event.message) {
+                return;
+            }
+
+            window._pendingRemoteMessages.push({
+                messageText: event.message,
+                username: event.username,
+            });
+        });
+    </script>
+    <script>
+        // ==================== CONFIGURATION ====================
+        const CONFIG = {
+            CANVAS_WIDTH: 800,
+            CANVAS_HEIGHT: 600,
+            TANK_SIZE: 20,
+            TANK_SPEED: 200,           // pixels per second
+            TANK_ROTATION_SPEED: 180,  // degrees per second
+            SEND_UPDATE_INTERVAL: 100, // ms between network updates
+            PLAYER_TIMEOUT: 5000,      // ms to remove inactive player
+            MESSAGE_PREFIX: '/webwidget.tank ',
+            FILTER_PATTERN: '/webwidget.tank'
+        };
+
+        // ==================== STATE ====================
+        let gameState = {
+            username: null,
+            localTank: {
+                x: CONFIG.CANVAS_WIDTH / 2,
+                y: CONFIG.CANVAS_HEIGHT / 2,
+                orientation: 0,           // degrees (0 = right, 90 = down)
+                velocityX: 0,
+                velocityY: 0,
+                rotationVelocity: 0       // degrees per second
+            },
+            remoteTanks: {},             // { username -> { x, y, orientation, lastUpdate } }
+            keys: {},                    // { keyCode -> bool }
+            lastSendTime: 0,
+            lastHeartbeatTime: 0,
+            lastSentPosition: { x: null, y: null, orientation: null },
+            remoteMessagePollerId: null,
+            isInGame: false
+        };
+
+        // ==================== UTILITY FUNCTIONS ====================
+        
+        /**
+         * Simple hash function to convert username to RGB color
+         */
+        function hashToColor(str) {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                hash = ((hash << 5) - hash) + str.charCodeAt(i);
+                hash = hash & hash; // Convert to 32-bit integer
+            }
+            
+            // Ensure we get bright, distinct colors
+            const hue = (hash % 360);
+            const saturation = 70 + (Math.abs(hash) % 30);
+            const lightness = 50 + (Math.abs(hash >> 8) % 20);
+            
+            return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+        }
+
+        /**
+         * Normalize angle to 0-360 range
+         */
+        function normalizeAngle(angle) {
+            while (angle < 0) angle += 360;
+            return angle % 360;
+        }
+
+        /**
+         * Convert degrees to radians
+         */
+        function toRadians(degrees) {
+            return degrees * (Math.PI / 180);
+        }
+
+        // ==================== UI EVENTS ====================
+        
+        const usernameInput = document.getElementById('usernameInput');
+        const joinBtn = document.getElementById('joinBtn');
+        const lobbyScreen = document.getElementById('lobbyScreen');
+        const gameScreen = document.getElementById('gameScreen');
+        const playerNameDisplay = document.getElementById('playerName');
+        const tankCountDisplay = document.getElementById('tankCount');
+        const leaveBtn = document.getElementById('leaveBtn');
+
+        joinBtn.addEventListener('click', joinGame);
+        usernameInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') joinGame();
+        });
+        leaveBtn.addEventListener('click', leaveGame);
+
+        // ==================== GAME FLOW ====================
+        
+        function joinGame() {
+            const username = usernameInput.value.trim();
+            if (!username) {
+                alert('Please enter a name');
+                return;
+            }
+
+            gameState.username = username;
+            gameState.isInGame = true;
+            playerNameDisplay.textContent = username;
+
+            // Switch UI
+            lobbyScreen.style.display = 'none';
+            gameScreen.style.display = 'flex';
+
+            // Initialize webwidget SDK
+            initializeWebwidget();
+
+            // Start game loop
+            startGameLoop();
+        }
+
+        function leaveGame() {
+            gameState.isInGame = false;
+            gameState.remoteTanks = {};
+            gameState.localTank = {
+                x: CONFIG.CANVAS_WIDTH / 2,
+                y: CONFIG.CANVAS_HEIGHT / 2,
+                orientation: 0,
+                velocityX: 0,
+                velocityY: 0,
+                rotationVelocity: 0
+            };
+            gameState.lastSentPosition = { x: null, y: null, orientation: null };
+            gameState.lastHeartbeatTime = 0;
+
+            // Switch UI
+            gameScreen.style.display = 'none';
+            lobbyScreen.style.display = 'flex';
+            usernameInput.value = '';
+            usernameInput.focus();
+        }
+
+        // ==================== WEBWIDGET INTEGRATION ====================
+        
+        function initializeWebwidget() {
+            const applyFilters = () => {
+                if (!window.webwidgetSDK || !window.webwidgetSDK.setMessageFilters) {
+                    return;
+                }
+
+                window.webwidgetSDK.setMessageFilters([CONFIG.FILTER_PATTERN]).catch(() => {});
+            };
+
+            if (window.webwidgetSDKReady && typeof window.webwidgetSDKReady.then === 'function') {
+                window.webwidgetSDKReady.then(applyFilters).catch(() => {});
+            } else {
+                applyFilters();
+            }
+
+            if (gameState.remoteMessagePollerId) {
+                return;
+            }
+
+            gameState.remoteMessagePollerId = setInterval(() => {
+                const pending = Array.isArray(window._pendingRemoteMessages)
+                    ? window._pendingRemoteMessages.splice(0, window._pendingRemoteMessages.length)
+                    : [];
+
+                pending.forEach(({ messageText }) => {
+                    if (!messageText.startsWith(CONFIG.MESSAGE_PREFIX)) {
+                        return;
+                    }
+
+                    try {
+                        const jsonStr = messageText.substring(CONFIG.MESSAGE_PREFIX.length);
+                        const update = JSON.parse(jsonStr);
+
+                        if (update.username !== gameState.username) {
+                            gameState.remoteTanks[update.username] = {
+                                x: update.x,
+                                y: update.y,
+                                orientation: update.orientation,
+                                lastUpdate: Date.now()
+                            };
+                        }
+                    } catch (_err) {}
+                });
+            }, 50);
+        }
+
+        function sendTankUpdate() {
+            // Skip if SDK unavailable
+            if (!window.webwidgetSDK || !window.webwidgetSDK.sendMessage) {
+                return;
+            }
+
+            const now = Date.now();
+            const newX = Math.round(gameState.localTank.x);
+            const newY = Math.round(gameState.localTank.y);
+            const newOrientation = Math.round(gameState.localTank.orientation);
+
+            // Only send if position has ACTUALLY changed
+            const positionChanged = 
+                gameState.lastSentPosition.x !== newX ||
+                gameState.lastSentPosition.y !== newY ||
+                gameState.lastSentPosition.orientation !== newOrientation;
+
+            // If position didn't change, check if heartbeat interval has elapsed
+            if (!positionChanged) {
+                // Send keep-alive heartbeat every 4 seconds to prevent remote tank from disappearing
+                if (now - gameState.lastHeartbeatTime < 4000) {
+                    return;
+                }
+            }
+
+            // Rate limit: don't send more than once per interval
+            if (now - gameState.lastSendTime < CONFIG.SEND_UPDATE_INTERVAL) {
+                return;
+            }
+
+            gameState.lastSendTime = now;
+            gameState.lastHeartbeatTime = now;
+            gameState.lastSentPosition = { x: newX, y: newY, orientation: newOrientation };
+
+            const update = {
+                username: gameState.username,
+                x: newX,
+                y: newY,
+                orientation: newOrientation
+            };
+
+            // ALWAYS prefix with slash command - this is required by the protocol
+            const message = CONFIG.MESSAGE_PREFIX + JSON.stringify(update);
+            window.webwidgetSDK.sendMessage(message, {
+                username: gameState.username,
+                type: 'text/plain'
+            });
+        }
+
+        // ==================== INPUT HANDLING ====================
+        
+        document.addEventListener('keydown', (e) => {
+            gameState.keys[e.key.toUpperCase()] = true;
+
+            if (e.key === 'Escape') {
+                leaveGame();
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            gameState.keys[e.key.toUpperCase()] = false;
+        });
+
+        // ==================== GAME LOOP ====================
+        
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        let gameLoopId = null;
+
+        function resizeCanvas() {
+            const container = document.getElementById('canvasContainer');
+            const rect = container.getBoundingClientRect();
+            const w = Math.floor(rect.width) || CONFIG.CANVAS_WIDTH;
+            const h = Math.floor(rect.height) || CONFIG.CANVAS_HEIGHT;
+            canvas.width = w;
+            canvas.height = h;
+        }
+
+        function startGameLoop() {
+            // Ensure canvas is sized before starting
+            setTimeout(() => {
+                resizeCanvas();
+            }, 50);
+            
+            window.addEventListener('resize', resizeCanvas);
+            gameLoopId = setInterval(gameLoop, 1000 / 60); // 60 FPS
+        }
+
+        function gameLoop() {
+            if (!gameState.isInGame) {
+                clearInterval(gameLoopId);
+                window.removeEventListener('resize', resizeCanvas);
+                return;
+            }
+
+            // Update local tank physics
+            updateLocalTank(1 / 60); // ~16ms per frame
+
+            // Remove stale remote tanks
+            removeStaleRemoteTanks();
+
+            // Send update to swarm if moved significantly
+            sendTankUpdate();
+
+            // Render
+            render();
+
+            // Update tank count
+            tankCountDisplay.textContent = Object.keys(gameState.remoteTanks).length + 1;
+        }
+
+        function updateLocalTank(deltaTime) {
+            const tank = gameState.localTank;
+
+            // Reset velocity
+            tank.velocityX = 0;
+            tank.velocityY = 0;
+            tank.rotationVelocity = 0;
+
+            // Input handling
+            const keys = gameState.keys;
+            
+            // Forward (W)
+            if (keys['W']) {
+                const rad = toRadians(tank.orientation);
+                tank.velocityX += Math.cos(rad) * CONFIG.TANK_SPEED;
+                tank.velocityY += Math.sin(rad) * CONFIG.TANK_SPEED;
+            }
+
+            // Backward (S)
+            if (keys['S']) {
+                const rad = toRadians(tank.orientation);
+                tank.velocityX -= Math.cos(rad) * CONFIG.TANK_SPEED;
+                tank.velocityY -= Math.sin(rad) * CONFIG.TANK_SPEED;
+            }
+
+            // Rotate counter-clockwise (A)
+            if (keys['A']) {
+                tank.rotationVelocity = -CONFIG.TANK_ROTATION_SPEED;
+            }
+
+            // Rotate clockwise (D)
+            if (keys['D']) {
+                tank.rotationVelocity = CONFIG.TANK_ROTATION_SPEED;
+            }
+
+            // Update position
+            tank.x += tank.velocityX * deltaTime;
+            tank.y += tank.velocityY * deltaTime;
+
+            // Update orientation
+            tank.orientation = normalizeAngle(tank.orientation + tank.rotationVelocity * deltaTime);
+
+            // Clamp to canvas bounds
+            tank.x = Math.max(CONFIG.TANK_SIZE, Math.min(CONFIG.CANVAS_WIDTH - CONFIG.TANK_SIZE, tank.x));
+            tank.y = Math.max(CONFIG.TANK_SIZE, Math.min(CONFIG.CANVAS_HEIGHT - CONFIG.TANK_SIZE, tank.y));
+        }
+
+        function removeStaleRemoteTanks() {
+            const now = Date.now();
+            for (const username in gameState.remoteTanks) {
+                const tank = gameState.remoteTanks[username];
+                if (now - tank.lastUpdate > CONFIG.PLAYER_TIMEOUT) {
+                    delete gameState.remoteTanks[username];
+                }
+            }
+        }
+
+        function render() {
+            // Ensure canvas has valid dimensions
+            if (!canvas.width || !canvas.height) {
+                resizeCanvas();
+                if (!canvas.width || !canvas.height) return;
+            }
+
+            // Clear canvas
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw border
+            ctx.strokeStyle = '#667eea';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(0, 0, canvas.width, canvas.height);
+
+            // Calculate scale factor (canvas size vs game space size)
+            const scaleX = canvas.width / CONFIG.CANVAS_WIDTH;
+            const scaleY = canvas.height / CONFIG.CANVAS_HEIGHT;
+
+            // Draw local tank (blue)
+            drawTank(gameState.localTank, '#4299ff', true, scaleX, scaleY);
+
+            // Draw remote tanks (hashed colors)
+            for (const username in gameState.remoteTanks) {
+                const tank = gameState.remoteTanks[username];
+                const color = hashToColor(username);
+                drawTank(tank, color, false, scaleX, scaleY);
+            }
+        }
+
+        function drawTank(tank, color, isLocal, scaleX, scaleY) {
+            const size = CONFIG.TANK_SIZE * Math.min(scaleX, scaleY);
+            const x = tank.x * scaleX;
+            const y = tank.y * scaleY;
+            const rad = toRadians(tank.orientation);
+
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(rad);
+
+            // Tank body (rectangle)
+            ctx.fillStyle = color;
+            ctx.fillRect(-size * 0.4, -size * 0.5, size * 0.8, size);
+
+            // Tank turret (circle)
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(0, 0, size * 0.35, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Turret outline
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(0, 0, size * 0.35, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Gun barrel
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(size * 0.6, 0);
+            ctx.stroke();
+
+            ctx.restore();
+
+            // Draw player label below tank (if remote)
+            if (!isLocal) {
+                ctx.fillStyle = '#fff';
+                ctx.font = '11px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(
+                    Object.keys(gameState.remoteTanks).find(k => gameState.remoteTanks[k] === tank) || '?',
+                    x,
+                    y + size + 12
+                );
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kilroy Vote</title>
+<script type="module" src="/apps/kilroy.groups/js/webwidget_sdk.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+  }
+
+  /* Lobby */
+  #lobby {
+    text-align: center;
+    padding: 40px;
+  }
+  #lobby h1 {
+    font-size: 2rem;
+    margin-bottom: 24px;
+    color: #e94560;
+  }
+  #lobby input {
+    padding: 12px 20px;
+    font-size: 1.1rem;
+    border: 2px solid #e94560;
+    border-radius: 8px;
+    background: #16213e;
+    color: #e0e0e0;
+    outline: none;
+    width: 260px;
+  }
+  #lobby input::placeholder { color: #666; }
+  #lobby button {
+    display: block;
+    margin: 20px auto 0;
+    padding: 12px 36px;
+    font-size: 1.1rem;
+    background: #e94560;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  #lobby button:hover { background: #c73850; }
+
+  /* Voting UI */
+  #voting {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+  }
+  #voting h2 {
+    font-size: 1.2rem;
+    color: #a0a0c0;
+  }
+  #display-area {
+    width: 384px;
+    height: 384px;
+    background: #16213e;
+    border: 2px solid #0f3460;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+    overflow-y: auto;
+  }
+  #display-area .vote-msg {
+    text-align: center;
+    font-size: 1.1rem;
+    color: #e0e0e0;
+    margin: 6px 0;
+    padding: 8px 16px;
+    border-radius: 6px;
+    background: rgba(233, 69, 96, 0.1);
+    animation: fadeIn 0.3s ease;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  #buttons {
+    display: flex;
+    gap: 24px;
+  }
+  #buttons button {
+    padding: 16px 48px;
+    font-size: 1.3rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: transform 0.1s, box-shadow 0.2s;
+  }
+  #buttons button:active { transform: scale(0.96); }
+  #btn-yes {
+    background: #22c55e;
+    color: #fff;
+    box-shadow: 0 4px 14px rgba(34,197,94,0.4);
+  }
+  #btn-yes:hover { background: #1ba34e; }
+  #btn-no {
+    background: #ef4444;
+    color: #fff;
+    box-shadow: 0 4px 14px rgba(239,68,68,0.4);
+  }
+  #btn-no:hover { background: #dc2626; }
+</style>
+</head>
+<body>
+
+<!-- Lobby -->
+<div id="lobby">
+  <h1>🗳️ Kilroy Vote</h1>
+  <input id="name-input" type="text" placeholder="Enter your name" maxlength="30" autofocus>
+  <button id="join-btn">Join Vote</button>
+</div>
+
+<!-- Voting Screen -->
+<div id="voting" class="voting-container">
+  <h2 id="welcome-msg"></h2>
+  <div id="display-area">
+    <div style="color:#666;">Waiting for votes…</div>
+  </div>
+  <div id="buttons">
+    <button id="btn-yes">Yes</button>
+    <button id="btn-no">No</button>
+  </div>
+</div>
+
+<script type="module">
+  import { initWebWidget } from '/apps/kilroy.groups/js/webwidget_sdk.js';
+
+  let userName = '';
+  let sdk = null;
+
+  /* ---- Lobby ---- */
+  const nameInput = document.getElementById('name-input');
+  const joinBtn   = document.getElementById('join-btn');
+
+  joinBtn.addEventListener('click', enterLobby);
+  nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') enterLobby(); });
+
+  function enterLobby() {
+    const name = nameInput.value.trim();
+    if (!name) { nameInput.focus(); return; }
+    userName = name;
+    document.getElementById('lobby').style.display = 'none';
+    document.getElementById('voting').style.display = 'flex';
+    document.getElementById('welcome-msg').textContent = 'Voting as: ' + userName;
+    setupClickFocus();
+    initSDK();
+  }
+
+  /* ---- Focus activation on click ---- */
+  function setupClickFocus() {
+    const votingContainer = document.querySelector('.voting-container');
+    if (votingContainer) {
+      votingContainer.addEventListener('click', requestWidgetFocus, true);
+    }
+  }
+
+  function requestWidgetFocus() {
+    // Send focus request to parent Kilroy window
+    if (window.parent !== window) {
+      window.parent.postMessage({
+        type: 'webwidget.focus',
+        widget_alias: document.querySelector('script')?.src || 'kilroy-vote'
+      }, '*');
+    }
+  }
+
+  /* ---- SDK init ---- */
+  function initSDK() {
+    const sparams = new Proxy(new URLSearchParams(window.location.search), {
+      get: (searchParams, prop) => searchParams.get(prop),
+    });
+    const alias = (sparams.alias || "").trim();
+    const guid  = (sparams.guid  || "").trim();
+
+    if (!alias) {
+      console.error('[vote] Missing alias in URL args. Include alias= in the query string.');
+      return;
+    }
+
+    sdk = initWebWidget({
+      alias: alias,
+      guid:  guid || kilroy_guid(),
+      focusBridgeEnabled: true,
+    });
+
+    // Filter only /ww.vote messages
+    sdk.setMessageFilters(['/ww.vote']);
+
+    sdk.onMessage(handleIncoming);
+    console.log('[vote] Message filters set:', sdk.messageFilters);
+
+    sdk.ready.then(() => {
+      console.log('[vote] Connected to swarm');
+    }).catch(err => {
+      console.error('[vote] Connection failed:', err);
+    });
+  }
+
+  /* ---- Send votes ---- */
+  document.getElementById('btn-yes').addEventListener('click', () => sendVote('yes'));
+  document.getElementById('btn-no').addEventListener('click',  () => sendVote('no'));
+
+  function sendVote(choice) {
+    if (!sdk) return;
+    const msg = '/ww.vote ' + userName + ' votes ' + choice;
+    sdk.sendMessage(msg, {
+      username: userName,
+      type: 'text/plain',
+    });
+    console.log('[vote] Sent:', msg);
+  }
+
+  /* ---- Handle incoming votes ---- */
+  function handleIncoming(event) {
+    // event.message contains the raw message string, e.g. "/ww.vote Alice votes yes"
+    const msg = event.message || '';
+    if (!msg.startsWith('/ww.vote ')) return;
+
+    // Strip the /ww.vote prefix to get "<username> votes <yes/no>"
+    const body = msg.replace(/^\/ww\.vote\s+/, '').trim();
+    addVoteMessage(body);
+  }
+
+  function addVoteMessage(text) {
+    const area = document.getElementById('display-area');
+    // Clear placeholder
+    if (area.children.length === 1 && area.children[0].style.color === 'rgb(102, 102, 102)') {
+      area.innerHTML = '';
+    }
+    const div = document.createElement('div');
+    div.className = 'vote-msg';
+    div.textContent = text;
+    area.appendChild(div);
+    area.scrollTop = area.scrollHeight;
+  }
+
+  /* ---- Guid helper (inline from SDK docs) ---- */
+  function kilroy_guid() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+      const r = (Math.random() * 16) | 0;
+      return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+    });
+  }
+</script>
+</body>
+</html>
