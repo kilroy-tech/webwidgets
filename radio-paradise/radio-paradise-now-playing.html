@@ -783,14 +783,15 @@
         <input id="playerIdInput" name="player_id" autocomplete="off" spellcheck="false" />
       </label>
       <div class="dialog-actions">
-        <button type="submit" value="cancel" formnovalidate>Cancel</button>
+        <button id="playerIdCancelButton" type="button" value="cancel">Cancel</button>
         <button type="submit" value="save">Save</button>
       </div>
     </form>
   </dialog>
 
   <script type="module">
-    import { initWebWidget } from "/apps/kilroy.groups/js/webwidget_sdk.js";
+    import { initWebWidget } from "/apps/kilroy.utils/lib/kilroy/js/webwidget_sdk.js";
+    import { playerAcceptsTarget } from "./command-routing.js";
 
     const RP_API_URL = "https://api.radioparadise.com/api/nowplaying_list_v2022";
     const CHANNELS = [
@@ -833,6 +834,7 @@
     const playerIdDialogEl = document.getElementById("playerIdDialog");
     const playerIdFormEl = document.getElementById("playerIdForm");
     const playerIdInputEl = document.getElementById("playerIdInput");
+    const playerIdCancelButtonEl = document.getElementById("playerIdCancelButton");
     const statusTextEl = document.getElementById("statusText");
     const refreshRingEl = document.getElementById("refreshRing");
     const rowsEl = document.getElementById("rows");
@@ -1403,7 +1405,7 @@
       return [
         "# Radio Paradise WebWidget Commands",
         "",
-        "Control commands target a configured player ID:",
+        "Control commands include a target player ID:",
         "- `/ww.rp.play <id> [local]` - Start playback",
         "- `/ww.rp.pause <id> [local]` - Pause playback",
         "- `/ww.rp.channel <id> <chan> [local]` - Switch channel (`0`, `1`, `2`, `3`, or `5`)",
@@ -1412,6 +1414,7 @@
         "- `/ww.rp.help [id] [local]` - Show this help",
         "",
         "Responses are sent as `/ww.rp.results { id, status, msg }`; `local` omits the `/wa` prefix.",
+        "A player with an unset ID or ID `*` accepts commands for any target. Other players accept only their configured ID.",
         "Set or edit this widget's ID by clicking `ID Not Set` or the `[id]` label in the heading."
       ].join("\n");
     }
@@ -1426,12 +1429,11 @@
       if (command === "/ww.rp.help") {
         const explicitTargetId = targetId && targetId.toLowerCase() !== "local" ? targetId : "";
         const isLocal = parts.some((part, index) => index > 0 && part.toLowerCase() === "local");
-        if (explicitTargetId && (!playerId || explicitTargetId.toLowerCase() !== playerId.toLowerCase())) return;
+        if (explicitTargetId && !playerAcceptsTarget(playerId, explicitTargetId)) return;
         sendResult("OK", getHelpMarkdown(), isLocal);
         return;
       }
-      if (!playerId) return;
-      if (targetId.toLowerCase() !== playerId.toLowerCase()) return;
+      if (!playerAcceptsTarget(playerId, targetId)) return;
 
       if (command === "/ww.rp.play") {
         const isLocal = (parts[2] || "").toLowerCase() === "local";
@@ -1540,13 +1542,10 @@
     });
 
     playerIdButtonEl.addEventListener("click", openPlayerIdDialog);
+    playerIdCancelButtonEl.addEventListener("click", () => playerIdDialogEl.close());
 
     playerIdFormEl.addEventListener("submit", (event) => {
       event.preventDefault();
-      if (event.submitter && event.submitter.value === "cancel") {
-        playerIdDialogEl.close();
-        return;
-      }
       savePlayerId(playerIdInputEl.value).then(() => playerIdDialogEl.close());
     });
 

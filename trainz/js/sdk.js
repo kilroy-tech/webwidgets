@@ -1,4 +1,4 @@
-import { initWebWidget } from "/apps/kilroy.groups/js/webwidget_sdk.js";
+import { initWebWidget } from "/apps/kilroy.utils/lib/kilroy/js/webwidget_sdk.js";
 
 const params = new URLSearchParams(window.location.search);
 export const sdk = initWebWidget({

@@ -1,4 +1,4 @@
-import { initWebWidget } from "/apps/kilroy.groups/js/webwidget_sdk.js";
+import { initWebWidget } from "/apps/kilroy.utils/lib/kilroy/js/webwidget_sdk.js";
 
 const BASE_PREFIX = "/ww.myplace";
 const CHAT_CMD = "/ww.myplace.chat";

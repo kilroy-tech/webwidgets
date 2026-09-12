@@ -17,6 +17,7 @@ A webwidget can:
 ## Repository Contents
 
 - `radio-paradise/` - Radio Paradise now-playing widget.
+- `robotwar/` - Programmable robot combat game with compiler, test bench, and battlefield simulator.
 - `trainz/` - Model railway layout and train simulation widget.
 - `DEVELOPER.md` - Detailed SDK, URL bootstrap, messaging, filtering, lifecycle, and storage documentation.
 
@@ -35,5 +36,5 @@ Do not use a `file:` URL for a widget. See [DEVELOPER.md](DEVELOPER.md) for the 
 A widget must import the master SDK from the `kilroy.groups` app:
 
 ```javascript
-import { initWebWidget } from "/apps/kilroy.groups/js/webwidget_sdk.js";
+import { initWebWidget } from "/apps/kilroy.utils/lib/kilroy/js/webwidget_sdk.js";
 ```

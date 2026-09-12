@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>RobotWar</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">RW</span>
+      <div><h1>RobotWar</h1><p>Autonomous combat laboratory</p></div>
+    </div>
+    <nav class="view-tabs" aria-label="Workspace view">
+      <button class="view-tab active" data-view="arena" type="button">Arena</button>
+      <button class="view-tab" data-view="bench" type="button">Test bench</button>
+      <a class="manual-link" href="./Robotwar.pdf" target="_blank" rel="noreferrer">Manual</a>
+    </nav>
+    <div class="connection"><span id="connectionDot"></span><span id="connectionText">Local</span></div>
+  </header>
+
+  <main class="workbench">
+    <section class="code-panel" aria-label="Robot workshop">
+      <div class="panel-head">
+        <div id="robotTabs" class="robot-tabs" role="tablist"></div>
+        <button id="addRobotBtn" class="icon-button" type="button" title="Add robot" aria-label="Add robot"><i data-lucide="plus"></i></button>
+      </div>
+      <div class="robot-meta">
+        <label>Name <input id="robotName" maxlength="20" spellcheck="false"></label>
+        <span id="compileBadge" class="badge neutral">Not compiled</span>
+        <button id="removeRobotBtn" class="icon-button danger" type="button" title="Remove robot" aria-label="Remove robot"><i data-lucide="trash-2"></i></button>
+      </div>
+      <div class="editor-wrap">
+        <div id="editor" aria-label="Robot source editor"></div>
+        <textarea id="editorFallback" aria-label="Robot source editor" spellcheck="false"></textarea>
+      </div>
+      <div class="code-actions">
+        <button id="compileBtn" class="primary" type="button"><i data-lucide="cpu"></i>Compile</button>
+        <button id="importBtn" type="button"><i data-lucide="upload"></i>Import</button>
+        <button id="exportBtn" type="button"><i data-lucide="download"></i>Export</button>
+        <input id="fileInput" type="file" accept=".robot,.txt,.json" hidden>
+        <span id="sourceStats">0 lines</span>
+      </div>
+      <div class="lower-tabs" role="tablist">
+        <button class="lower-tab active" data-lower="diagnostics" type="button">Diagnostics</button>
+        <button class="lower-tab" data-lower="object" type="button">Object code</button>
+      </div>
+      <div id="diagnostics" class="output-pane"></div>
+      <pre id="objectCode" class="output-pane" hidden></pre>
+    </section>
+
+    <section class="simulation-panel" aria-label="Simulation">
+      <div class="sim-toolbar arena-only">
+        <button id="battleBtn" class="primary" type="button"><i data-lucide="play"></i>Battle</button>
+        <button id="pauseBtn" type="button" disabled><i data-lucide="pause"></i><span>Pause</span></button>
+        <button id="resetBattleBtn" class="icon-button" type="button" title="Reset battle" aria-label="Reset battle"><i data-lucide="rotate-ccw"></i></button>
+        <label class="compact-label">Battles <input id="matchCount" type="number" min="1" max="99" value="1"></label>
+        <label class="compact-label">Speed
+          <select id="battleSpeed"><option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="2">2x</option><option value="4">4x</option></select>
+        </label>
+        <label class="compact-label">Seed <input id="seedInput" type="number" placeholder="Random" title="Leave blank for a fresh seed every battle"></label>
+      </div>
+      <div class="sim-toolbar bench-only" hidden>
+        <button id="benchRunBtn" class="primary" type="button"><i data-lucide="play"></i><span>Run</span></button>
+        <button id="benchStepBtn" type="button"><i data-lucide="step-forward"></i>Step</button>
+        <button id="benchResetBtn" class="icon-button" type="button" title="Reset test bench" aria-label="Reset test bench"><i data-lucide="rotate-ccw"></i></button>
+        <button id="radarInjectBtn" type="button"><i data-lucide="scan-line"></i>Radar contact</button>
+        <button id="damageInjectBtn" type="button"><i data-lucide="zap"></i>Damage</button>
+      </div>
+
+      <div id="arenaView" class="arena-stage">
+        <canvas id="arenaCanvas" aria-label="RobotWar battlefield"></canvas>
+        <div id="arenaEmpty" class="arena-message"><strong>Programs standing by</strong><span>Compile at least two robots, then start a battle.</span></div>
+        <div class="arena-grid-label north">0°</div><div class="arena-grid-label east">90°</div>
+        <div class="arena-grid-label south">180°</div><div class="arena-grid-label west">270°</div>
+      </div>
+
+      <div id="benchView" class="bench-stage" hidden>
+        <div class="bench-readout">
+          <div><span>PC</span><strong id="benchPc">000</strong></div>
+          <div><span>ACC</span><strong id="benchAcc">0</strong></div>
+          <div><span>STEPS</span><strong id="benchSteps">0</strong></div>
+          <div><span>STATE</span><strong id="benchState">READY</strong></div>
+        </div>
+        <div class="bench-content">
+          <pre id="benchCode" class="bench-code"></pre>
+          <div id="registerGrid" class="register-grid"></div>
+        </div>
+      </div>
+
+      <div class="status-strip">
+        <div><span class="status-label">Status</span><strong id="battleStatus">Ready</strong></div>
+        <div><span class="status-label">Clock</span><strong id="battleClock">00:00.0</strong></div>
+        <div><span class="status-label">Match</span><strong id="matchStatus">1 / 1</strong></div>
+      </div>
+      <div id="roster" class="roster"></div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="/apps/kilroy.utils/lib/ace/1.44.0/src-min-noconflict/ace.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>

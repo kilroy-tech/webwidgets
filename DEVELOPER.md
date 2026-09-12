@@ -4,7 +4,7 @@ This document describes how to extend and interoperate with the kilroy.groups su
 
 ## WebWidget SDK for Developers
 
-The WebWidget SDK (`/apps/kilroy.groups/js/webwidget_sdk.js`) is a complete, self-contained JavaScript library for integrating real-time messaging and pub/sub communication into web applications running as iframes inside kilroy.groups webwidget process diagrams.
+The WebWidget SDK (`/apps/kilroy.utils/lib/kilroy/js/webwidget_sdk.js`) is a complete, self-contained JavaScript library for integrating real-time messaging and pub/sub communication into web applications running as iframes inside kilroy.groups webwidget process diagrams.
 
 ### Overview
 
@@ -49,7 +49,7 @@ If webwidget swarm bootstrap is disabled, the widget does not join or publish to
 Simply import and initialize the SDK in your HTML:
 
 ```javascript
-import { initWebWidget } from "/apps/kilroy.groups/js/webwidget_sdk.js";
+import { initWebWidget } from "/apps/kilroy.utils/lib/kilroy/js/webwidget_sdk.js";
 
 const sdk = initWebWidget({ alias: "your.widget.alias", guid: "your-widget-id" });
 ```
@@ -228,7 +228,7 @@ console.log("Stored KV pairs:", sdk.kv);
 ### Complete Example: Simple Chat Widget
 
 ```javascript
-import { initWebWidget } from "/apps/kilroy.groups/js/webwidget_sdk.js";
+import { initWebWidget } from "/apps/kilroy.utils/lib/kilroy/js/webwidget_sdk.js";
 
 const messageInput = document.getElementById("message-input");
 const sendButton = document.getElementById("send-btn");
@@ -282,7 +282,7 @@ await sdk.setMessageFilters(["/chat"]);
 ### Complete Example: Multiplayer Game (Tank)
 
 ```javascript
-import { initWebWidget } from "/apps/kilroy.groups/js/webwidget_sdk.js";
+import { initWebWidget } from "/apps/kilroy.utils/lib/kilroy/js/webwidget_sdk.js";
 
 const username = "player_" + Math.random().toString(36).slice(7);
 const localState = {

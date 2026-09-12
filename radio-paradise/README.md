@@ -12,7 +12,7 @@ A Kilroy webwidget for Radio Paradise now-playing data and lightweight player co
 The widget imports the master SDK from the `kilroy.groups` app:
 
 ```javascript
-import { initWebWidget } from "/apps/kilroy.groups/js/webwidget_sdk.js";
+import { initWebWidget } from "/apps/kilroy.utils/lib/kilroy/js/webwidget_sdk.js";
 ```
 
 It initializes the SDK with `focusBridgeEnabled: true`, receives Kilroy runtime bootstrap values from the URL, and registers `/ww.rp` message filters for slash-command handling.
@@ -29,10 +29,10 @@ Use the Kilroy public web root URL and include the bootstrap placeholder so `kil
 /kilroypublic/webwidgets/radio-paradise/radio-paradise-now-playing.html?{{bootstrap_args}}
 ```
 
-If you want to preconfigure the player ID in the URL, append it after the bootstrap args with `&id=...`:
+To preconfigure the player ID in the URL, append it after the bootstrap args with `&id=...`:
 
 ```text
-/kilroypublic/webwidgets/radio-paradise/radio-paradise-now-playing.html?{{bootstrap_args}}&id=chuck
+/kilroypublic/webwidgets/radio-paradise/radio-paradise-now-playing.html?{{bootstrap_args}}&id=<player-id>
 ```
 
 Use `&{{bootstrap_args}}` instead of `?{{bootstrap_args}}` only if the URL already has query parameters before the bootstrap placeholder.
@@ -40,7 +40,7 @@ Use `&{{bootstrap_args}}` instead of `?{{bootstrap_args}}` only if the URL alrea
 Do not point the widget at a local SDK file. The SDK source of truth is the `kilroy.groups` app at:
 
 ```text
-/apps/kilroy.groups/js/webwidget_sdk.js
+/apps/kilroy.utils/lib/kilroy/js/webwidget_sdk.js
 ```
 
 ## Player ID
@@ -53,7 +53,9 @@ The widget resolves its player ID in this order:
 2. SDK persistent KV value: `player_id`
 3. Empty/unset state
 
-If no ID is set, the heading shows `ID Not Set`. Click it to open a small dialog and save an ID interactively. If an ID is already set, the heading shows `[id]`; click it to edit the ID.
+If no ID is set, the heading shows `ID Not Set`. Click it to open a small dialog and save an ID interactively. Pressing Enter in the field saves it. If an ID is already set, the heading shows `[id]`; click it to edit the ID.
+
+An unset/empty player ID or the ID `*` puts the widget in wildcard mode: it accepts every valid Radio Paradise slash command regardless of the target ID in that command. A nonempty ID other than `*` accepts only commands addressed to that ID, compared case-insensitively.
 
 The widget stores the ID with the SDK using the exact key `player_id`:
 
@@ -78,7 +80,7 @@ On page load or reload, the widget attempts to restore `player_settings`. It app
 
 ## Slash Commands
 
-All commands use the `/ww.rp` namespace. Control/status commands take the target player ID as their first argument. If the target ID does not match this widget's configured ID, the widget silently ignores the command.
+All commands use the `/ww.rp` namespace. Control/status commands take the target player ID as their first argument. A specifically identified player silently ignores commands for other IDs; an unset or `*` player accepts any target.
 
 | Command | Format | Description |
 | --- | --- | --- |
@@ -108,13 +110,13 @@ Commands respond with `/ww.rp.results` and a JSON object containing `id`, `statu
 By default, responses are prefixed with `/wa` so they route back to the parent/agent swarm:
 
 ```text
-/wa /ww.rp.results {"id":"chuck","status":"OK","msg":"Playback paused"}
+/wa /ww.rp.results {"id":"kitchen","status":"OK","msg":"Playback paused"}
 ```
 
 If the final argument is `local`, the widget omits the `/wa` prefix and keeps the response in the local `-ww` swarm:
 
 ```text
-/ww.rp.results {"id":"chuck","status":"OK","msg":"Playback paused"}
+/ww.rp.results {"id":"kitchen","status":"OK","msg":"Playback paused"}
 ```
 
 `status` is `OK` or `ERR`. `msg` is a human-readable message for control commands. For `/ww.rp.status`, `msg` is a JSON-stringified object containing the current player status.
@@ -123,7 +125,7 @@ Example status `msg` payload:
 
 ```json
 {
-  "id": "chuck",
+  "id": "kitchen",
   "channel": "The Main Mix",
   "channel_number": 0,
   "stream_url": "https://stream.radioparadise.com/aac-320",
@@ -152,26 +154,26 @@ Ask for help:
 /ww.rp.help local
 ```
 
-Pause Chuck's player:
+Pause the player whose confirmed ID is `kitchen`:
 
 ```text
-/ww.rp.pause chuck
+/ww.rp.pause kitchen
 ```
 
-Switch Chuck's player to Mellow Mix:
+Switch that player to Mellow Mix:
 
 ```text
-/ww.rp.channel chuck 1
+/ww.rp.channel kitchen 1
 ```
 
-Set Chuck's volume to 40 percent:
+Set that player's volume to 40 percent:
 
 ```text
-/ww.rp.volume chuck 40
+/ww.rp.volume kitchen 40
 ```
 
-Get Chuck's player status locally:
+Get that player's status locally:
 
 ```text
-/ww.rp.status chuck local
+/ww.rp.status kitchen local
 ```
