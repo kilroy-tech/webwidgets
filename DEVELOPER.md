@@ -90,6 +90,12 @@ const sdk = initWebWidget({}); // Will use URL params if present
 
 When opening a page from `kilroypublic` in a webwidget, always use the `?{{bootstrap_args}}` suffix. Kilroy expands this placeholder when launching the page and supplies the runtime query parameters needed for SDK routing and swarm communication. Do not replace it with a manually constructed `alias` or `guid` query string for Kilroy-hosted pages, and do not append a second `?` if the URL already has query parameters; use `&{{bootstrap_args}}` in that case.
 
+#### Widget-Specific Search Arguments
+
+Widgets may define additional URL search arguments for their own configuration. Read and validate them with `URLSearchParams`; use defaults only for optional widget-specific settings. These arguments must not replace or provide fallbacks for Kilroy routing arguments such as `alias` and `group_name`.
+
+When an LLM launches a webwidget with `open_url_in_webwidget`, pass widget-specific arguments through that tool's `additional_search_args` parameter as key/value data. Kilroy appends them after its bootstrap arguments, so they are available to the widget when it initializes. The tool handles bootstrap arguments automatically; LLMs should not add or interpret the `{{bootstrap_args}}` marker.
+
 ### Core API
 
 #### Initialization
